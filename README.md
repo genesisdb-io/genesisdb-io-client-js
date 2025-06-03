@@ -18,7 +18,7 @@ yarn add genesisdb
 
 ### The following envvars are required
 ```
-EVENTSTORE_AUTH_TOKEN=fkf1d4ce8598fc660fa9e813b0367d151aa4ba209a620c878ddec90fda198b2b
+EVENTSTORE_AUTH_TOKEN=<secret>
 EVENTSTORE_TZ=Europe/Vienna
 EVENTSTORE_EVENT_SPEC_VERSION=1.0
 EVENTSTORE_SOURCE=io.genesisdb.<sourcename>
