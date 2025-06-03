@@ -1,0 +1,30 @@
+{
+  "name": "genesisdb",
+  "version": "1.0.0",
+  "description": "Genesis DB SDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "genesis",
+    "genesisdb",
+    "eventstore",
+    "sdk",
+    "typescript"
+  ],
+  "author": "Patric Eckhart",
+  "license": "MIT",
+  "dependencies": {
+    "cloudevents": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
