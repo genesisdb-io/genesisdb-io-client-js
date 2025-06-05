@@ -311,4 +311,74 @@ export class Client {
     }
   }
 
+  async *observeEvents(subject: string): AsyncGenerator<CloudEvent<unknown>, void, unknown> {
+    const url = `${this.apiUrl}/api/${this.apiVersion}/observe`;
+
+    const requestBody = { subject: subject };
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + this.authToken,
+          'Content-Type': 'application/json',
+          Accept: 'application/x-ndjson',
+          'User-Agent': 'inoovum-eventstore-sdk',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!res.ok) {
+        console.error('API Error:', {
+          status: res.status,
+          statusText: res.statusText,
+          headers: Object.fromEntries(res.headers)
+        });
+        throw new Error(`API Error: ${res.status} ${res.statusText}`);
+      }
+
+      if (!res.body) {
+        throw new Error('Response body is null');
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          // If the stream ends, we'll break the loop
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        let newlineIndex;
+
+        while ((newlineIndex = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, newlineIndex).trim();
+          buffer = buffer.slice(newlineIndex + 1);
+
+          if (!line) continue;
+
+          try {
+            const jsonStr = line.startsWith('data: ') ? line.slice(6) : line;
+            const json = JSON.parse(jsonStr);
+            console.log('Parsed JSON:', json);
+            const event = new CloudEvent(json);
+            console.log('Created CloudEvent:', event);
+            yield event;
+          } catch (err) {
+            console.error('Error while parsing event:', err);
+            console.error('Problem with JSON:', line);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error while observing events:', error);
+      throw error;
+    }
+  }
+
 }
