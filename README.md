@@ -18,12 +18,9 @@ yarn add genesisdb
 
 ### The following envvars are required
 ```
-EVENTSTORE_AUTH_TOKEN=<secret>
-EVENTSTORE_TZ=Europe/Vienna
-EVENTSTORE_EVENT_SPEC_VERSION=1.0
-EVENTSTORE_SOURCE=io.genesisdb.<sourcename>
-EVENTSTORE_MEMCACHE=true
-EVENTSTORE_PROMETHEUS_METRICS=true
+GENESISDB_AUTH_TOKEN=<secret>
+GENESISDB_API_URL=http://localhost:8080
+GENESISDB_API_VERSION=v1
 ```
 
 ```typescript

@@ -7,9 +7,9 @@ export class Client {
 
   private checkRequiredEnv() {
     const requiredEnvVars = [
-      'EVENTSTORE_API_URL',
-      'EVENTSTORE_API_VERSION',
-      'EVENTSTORE_AUTH_TOKEN'
+      'GENESISDB_API_URL',
+      'GENESISDB_API_VERSION',
+      'GENESISDB_AUTH_TOKEN',
     ];
 
     const missingEnvVars = requiredEnvVars.filter(
@@ -28,9 +28,9 @@ export class Client {
     authToken?: string
   }) {
     if (config) {
-      const envApiUrl = process.env.EVENTSTORE_API_URL;
-      const envApiVersion = process.env.EVENTSTORE_API_VERSION;
-      const envAuthToken = process.env.EVENTSTORE_AUTH_TOKEN;
+      const envApiUrl = process.env.GENESISDB_API_URL;
+      const envApiVersion = process.env.GENESISDB_API_VERSION;
+      const envAuthToken = process.env.GENESISDB_AUTH_TOKEN;
 
       this.apiUrl = config.apiUrl || envApiUrl || '';
       this.apiVersion = config.apiVersion || envApiVersion || '';
@@ -38,15 +38,15 @@ export class Client {
 
       if (!this.apiUrl || !this.apiVersion || !this.authToken) {
         this.checkRequiredEnv();
-        this.apiUrl = process.env.EVENTSTORE_API_URL!;
-        this.apiVersion = process.env.EVENTSTORE_API_VERSION!;
-        this.authToken = process.env.EVENTSTORE_AUTH_TOKEN!;
+        this.apiUrl = process.env.GENESISDB_API_URL!;
+        this.apiVersion = process.env.GENESISDB_API_VERSION!;
+        this.authToken = process.env.GENESISDB_AUTH_TOKEN!;
       }
     } else {
       this.checkRequiredEnv();
-      this.apiUrl = process.env.EVENTSTORE_API_URL!;
-      this.apiVersion = process.env.EVENTSTORE_API_VERSION!;
-      this.authToken = process.env.EVENTSTORE_AUTH_TOKEN!;
+      this.apiUrl = process.env.GENESISDB_API_URL!;
+      this.apiVersion = process.env.GENESISDB_API_VERSION!;
+      this.authToken = process.env.GENESISDB_AUTH_TOKEN!;
     }
   }
 
