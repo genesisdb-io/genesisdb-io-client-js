@@ -35,7 +35,7 @@ await client.streamEvents('/customer');
 await client.commitEvents([
   {
     subject: '/customer',
-    type: 'added',
+    type: 'io.genesisdb.app.customer-added',
     data: {
       firstName: 'Bruce',
       lastName: 'Wayne',
@@ -44,7 +44,7 @@ await client.commitEvents([
   },
   {
     subject: '/customer',
-    type: 'added',
+    type: 'io.genesisdb.app.customer-added',
     data: {
       firstName: 'Alfred',
       lastName: 'Pennyworth',
@@ -52,8 +52,18 @@ await client.commitEvents([
     }
   },
   {
+    source: 'io.genesisdb.store',
+    subject: '/article',
+    type: 'io.genesisdb.store.article-added',
+    data: {
+      name: 'Tumbler',
+      color: 'black',
+      price: 2990000.00
+    }
+  },
+  {
     subject: '/customer/fed2902d-0135-460d-8605-263a06308448',
-    type: 'personalDataChanged',
+    type: 'io.genesisdb.app.customer-personaldata-changed',
     data: {
       firstName: 'Angus',
       lastName: 'MacGyer',
@@ -61,6 +71,20 @@ await client.commitEvents([
     }
   }
 ]);
+
+const encoder = new TextEncoder()
+const stream = new ReadableStream({
+  async start(controller) {
+    try {
+      for await (const event of client.observeEvents('/customer')) {
+        controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'))
+      }
+    } catch (err) {
+      console.error('Error:', err)
+      controller.close()
+    }
+  }
+})
 
 // Use the genesisdb client status methods
 await client.audit();
