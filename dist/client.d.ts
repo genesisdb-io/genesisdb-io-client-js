@@ -18,18 +18,20 @@ export declare class Client {
      * await eventStore.commitEvents([
      *   {
      *     subject: '/user',  // For new resources
-     *     type: 'added',
-     *     data: { id: 123, name: 'John' }
+     *     type: 'io.genesisdb.app.user-added',
+     *     data: { name: 'John' }
      *   },
      *   {
-     *     subject: '/user/123',  // For existing resources with UUID
-     *     type: 'updated',
-     *     data: { id: 123, name: 'John Smith' }
+     *     subject: '/user/6db0dbbe-218e-4518-b740-93b6e11e6190',  // For existing resources with UUID
+     *     type: 'io.genesisdb.app.user-updated',
+     *     data: { name: 'John Smith' }
+     *     source: 'io.genesisdb.app'
      *   }
      * ]);
      * ```
      */
     commitEvents(events: {
+        source?: string | null;
         subject: string;
         type: string;
         data: any;
