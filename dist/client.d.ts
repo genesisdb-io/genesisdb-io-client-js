@@ -17,21 +17,22 @@ export declare class Client {
      * ```typescript
      * await eventStore.commitEvents([
      *   {
+     *     source: 'io.genesisdb.app',
      *     subject: '/user',  // For new resources
      *     type: 'io.genesisdb.app.user-added',
      *     data: { name: 'John' }
      *   },
      *   {
-     *     subject: '/user/6db0dbbe-218e-4518-b740-93b6e11e6190',  // For existing resources with UUID
+     *     source: 'io.genesisdb.app',
+     *     subject: '/user/6db0dbbe-218e-4518-b740-93b6e11e6190',
      *     type: 'io.genesisdb.app.user-updated',
      *     data: { name: 'John Smith' }
-     *     source: 'io.genesisdb.app'
      *   }
      * ]);
      * ```
      */
     commitEvents(events: {
-        source?: string | null;
+        source: string;
         subject: string;
         type: string;
         data: any;

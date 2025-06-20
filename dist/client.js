@@ -112,15 +112,16 @@ class Client {
      * ```typescript
      * await eventStore.commitEvents([
      *   {
+     *     source: 'io.genesisdb.app',
      *     subject: '/user',  // For new resources
      *     type: 'io.genesisdb.app.user-added',
      *     data: { name: 'John' }
      *   },
      *   {
-     *     subject: '/user/6db0dbbe-218e-4518-b740-93b6e11e6190',  // For existing resources with UUID
+     *     source: 'io.genesisdb.app',
+     *     subject: '/user/6db0dbbe-218e-4518-b740-93b6e11e6190',
      *     type: 'io.genesisdb.app.user-updated',
      *     data: { name: 'John Smith' }
-     *     source: 'io.genesisdb.app'
      *   }
      * ]);
      * ```
@@ -129,12 +130,12 @@ class Client {
         const url = `${this.apiUrl}/api/${this.apiVersion}/commit`;
         const requestBody = {
             events: events.map(event => {
-                const base = {
+                return {
+                    source: event.source,
                     subject: event.subject,
                     type: event.type,
                     data: event.data
                 };
-                return event.source ? { ...base, source: event.source } : base;
             })
         };
         try {
