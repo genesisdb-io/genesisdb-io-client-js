@@ -76,7 +76,6 @@ export class Client {
         throw new Error(`API Error: ${res.status} ${res.statusText}`);
       }
 
-      // Log the raw response text first
       const rawText = await res.text();
 
       if (!rawText || rawText.trim() === '') {
@@ -84,7 +83,6 @@ export class Client {
         return [];
       }
 
-      // Create a new ReadableStream from the text
       const stream = new ReadableStream({
         start(controller) {
           controller.enqueue(new TextEncoder().encode(rawText));
@@ -128,11 +126,11 @@ export class Client {
   }
 
   /**
-   * Commits events to the EventStore
+   * Commits events to Genesis DB
    * @param events Array of events to commit
    * @example
    * ```typescript
-   * await eventStore.commitEvents([
+   * await client.commitEvents([
    *   {
    *     source: 'io.genesisdb.app',
    *     subject: '/user',  // For new resources
@@ -354,7 +352,6 @@ export class Client {
         const { done, value } = await reader.read();
 
         if (done) {
-          // If the stream ends, we'll break the loop
           break;
         }
 
