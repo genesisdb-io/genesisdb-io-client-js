@@ -75,6 +75,25 @@ await client.commitEvents([
   }
 ]);
 
+// Commit events with preconditions
+await client.commitEvents([
+  {
+    source: 'io.genesisdb.app',
+    subject: '/foo/21',
+    type: 'io.genesisdb.app.foo-added',
+    data: {
+      value: 'Foo'
+    }
+  }
+], [
+  {
+    type: 'isSubjectNew',
+    payload: {
+      subject: '/foo/21'
+    }
+  }
+]);
+
 const encoder = new TextEncoder()
 const stream = new ReadableStream({
   async start(controller) {
