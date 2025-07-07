@@ -59,13 +59,11 @@ class Client {
                 });
                 throw new Error(`API Error: ${res.status} ${res.statusText}`);
             }
-            // Log the raw response text first
             const rawText = await res.text();
             if (!rawText || rawText.trim() === '') {
                 console.log('No events found for subject:', subject);
                 return [];
             }
-            // Create a new ReadableStream from the text
             const stream = new ReadableStream({
                 start(controller) {
                     controller.enqueue(new TextEncoder().encode(rawText));
@@ -106,14 +104,15 @@ class Client {
         }
     }
     /**
-     * Commits events to the EventStore
+     * Commits events to Genesis DB
      * @param events Array of events to commit
+     * @param preconditions Optional array of preconditions to check before committing
      * @example
      * ```typescript
-     * await eventStore.commitEvents([
+     * await client.commitEvents([
      *   {
      *     source: 'io.genesisdb.app',
-     *     subject: '/user',  // For new resources
+     *     subject: '/user',
      *     type: 'io.genesisdb.app.user-added',
      *     data: { name: 'John' }
      *   },
@@ -125,8 +124,26 @@ class Client {
      *   }
      * ]);
      * ```
+     * @example
+     * ```typescript
+     * await client.commitEvents([
+     *   {
+     *     source: 'io.genesisdb.app',
+     *     subject: '/foo/21',
+     *     type: 'io.genesisdb.app.foo-added',
+     *     data: { value: 'Foo' }
+     *   }
+     * ], [
+     *   {
+     *     type: 'isSubjectNew',
+     *     payload: {
+     *       subject: '/foo/21'
+     *     }
+     *   }
+     * ]);
+     * ```
      */
-    async commitEvents(events) {
+    async commitEvents(events, preconditions) {
         const url = `${this.apiUrl}/api/${this.apiVersion}/commit`;
         const requestBody = {
             events: events.map(event => {
@@ -138,6 +155,9 @@ class Client {
                 };
             })
         };
+        if (preconditions && preconditions.length > 0) {
+            requestBody.preconditions = preconditions;
+        }
         try {
             const res = await fetch(url, {
                 method: 'POST',
@@ -308,7 +328,6 @@ class Client {
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) {
-                    // If the stream ends, we'll break the loop
                     break;
                 }
                 buffer += decoder.decode(value, { stream: true });
