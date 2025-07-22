@@ -32,6 +32,20 @@ const client = new Client();
 // Use the genesisdb client methods
 await client.streamEvents('/customer');
 
+// Stream Events from lower bound
+await client.streamEvents('/', {
+  lowerBound: '2d6d4141-6107-4fb2-905f-445730f4f2a9',
+  includeLowerBoundEvent: true
+});
+
+// Stream Events with latest by event type
+await client.streamEvents('/', {
+  latestByEventType: 'io.genesisdb.foo.foobarfoo-updated'
+});
+
+// This feature allows you to stream only the latest event of a specific type for each subject.
+// Useful for getting the current state of entities.
+
 await client.commitEvents([
   {
     source: 'io.genesisdb.app',
@@ -94,6 +108,24 @@ await client.commitEvents([
   }
 ]);
 
+// Usage of referenced data (GDPR)
+await client.commitEvents([
+  {
+    source: 'io.genesisdb.app',
+    subject: '/foo/21',
+    type: 'io.genesisdb.app.foo-added',
+    data: {
+      value: 'Foo'
+    },
+    options: {
+      storeDataAsReference: true
+    }
+  }
+]);
+
+// Deleting referenced data (GDPR)
+await client.eraseData('/foo/21');
+
 const encoder = new TextEncoder()
 const stream = new ReadableStream({
   async start(controller) {
@@ -107,6 +139,14 @@ const stream = new ReadableStream({
     }
   }
 })
+
+// Observe Events from lower bound (Message queue)
+for await (const event of client.observeEvents('/customer', {
+  lowerBound: '2d6d4141-6107-4fb2-905f-445730f4f2a9',
+  includeLowerBoundEvent: true
+})) {
+  console.log('Received event:', event)
+}
 
 // Use the genesisdb client status methods
 await client.audit();

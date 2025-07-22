@@ -37,9 +37,12 @@ class Client {
             this.authToken = process.env.GENESISDB_AUTH_TOKEN;
         }
     }
-    async streamEvents(subject) {
+    async streamEvents(subject, options) {
         const url = `${this.apiUrl}/api/${this.apiVersion}/stream`;
         const requestBody = { subject: subject };
+        if (options) {
+            requestBody.options = options;
+        }
         try {
             const res = await fetch(url, {
                 method: 'POST',
@@ -131,7 +134,8 @@ class Client {
      *     source: 'io.genesisdb.app',
      *     subject: '/foo/21',
      *     type: 'io.genesisdb.app.foo-added',
-     *     data: { value: 'Foo' }
+     *     data: { value: 'Foo' },
+     *     options: { storeDataAsReference: true }
      *   }
      * ], [
      *   {
@@ -147,12 +151,16 @@ class Client {
         const url = `${this.apiUrl}/api/${this.apiVersion}/commit`;
         const requestBody = {
             events: events.map(event => {
-                return {
+                const eventData = {
                     source: event.source,
                     subject: event.subject,
                     type: event.type,
                     data: event.data
                 };
+                if (event.options) {
+                    eventData.options = event.options;
+                }
+                return eventData;
             })
         };
         if (preconditions && preconditions.length > 0) {
@@ -179,6 +187,40 @@ class Client {
         }
         catch (error) {
             console.error('Error while committing events:', error);
+            throw error;
+        }
+    }
+    /**
+     * Erase data for a subject (GDPR compliance)
+     * @param subject The subject to erase data for
+     * @example
+     * ```typescript
+     * await client.eraseData('/foo/21');
+     * ```
+     */
+    async eraseData(subject) {
+        const url = `${this.apiUrl}/api/${this.apiVersion}/erase`;
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    Authorization: 'Bearer ' + this.authToken,
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'genesisdb-sdk',
+                },
+                body: JSON.stringify({ subject }),
+            });
+            if (!res.ok) {
+                console.error('API Error:', {
+                    status: res.status,
+                    statusText: res.statusText,
+                    headers: Object.fromEntries(res.headers)
+                });
+                throw new Error(`API Error: ${res.status} ${res.statusText}`);
+            }
+        }
+        catch (error) {
+            console.error('Error while erasing data:', error);
             throw error;
         }
     }
@@ -297,9 +339,12 @@ class Client {
             throw error;
         }
     }
-    async *observeEvents(subject) {
+    async *observeEvents(subject, options) {
         const url = `${this.apiUrl}/api/${this.apiVersion}/observe`;
         const requestBody = { subject: subject };
+        if (options) {
+            requestBody.options = options;
+        }
         try {
             const res = await fetch(url, {
                 method: 'POST',

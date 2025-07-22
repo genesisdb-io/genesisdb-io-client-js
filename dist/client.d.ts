@@ -9,7 +9,11 @@ export declare class Client {
         apiVersion?: string;
         authToken?: string;
     });
-    streamEvents(subject: string): Promise<CloudEvent<unknown>[]>;
+    streamEvents(subject: string, options?: {
+        lowerBound?: string;
+        includeLowerBoundEvent?: boolean;
+        latestByEventType?: string;
+    }): Promise<CloudEvent<unknown>[]>;
     /**
      * Commits events to Genesis DB
      * @param events Array of events to commit
@@ -38,7 +42,8 @@ export declare class Client {
      *     source: 'io.genesisdb.app',
      *     subject: '/foo/21',
      *     type: 'io.genesisdb.app.foo-added',
-     *     data: { value: 'Foo' }
+     *     data: { value: 'Foo' },
+     *     options: { storeDataAsReference: true }
      *   }
      * ], [
      *   {
@@ -55,12 +60,28 @@ export declare class Client {
         subject: string;
         type: string;
         data: any;
+        options?: {
+            storeDataAsReference?: boolean;
+        };
     }[], preconditions?: {
         type: string;
         payload: any;
     }[]): Promise<void>;
+    /**
+     * Erase data for a subject (GDPR compliance)
+     * @param subject The subject to erase data for
+     * @example
+     * ```typescript
+     * await client.eraseData('/foo/21');
+     * ```
+     */
+    eraseData(subject: string): Promise<void>;
     audit(): Promise<string>;
     ping(): Promise<string>;
     q(query: string): Promise<any[]>;
-    observeEvents(subject: string): AsyncGenerator<CloudEvent<unknown>, void, unknown>;
+    observeEvents(subject: string, options?: {
+        lowerBound?: string;
+        includeLowerBoundEvent?: boolean;
+        latestByEventType?: string;
+    }): AsyncGenerator<CloudEvent<unknown>, void, unknown>;
 }
