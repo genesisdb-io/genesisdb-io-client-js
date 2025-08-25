@@ -148,6 +148,10 @@ for await (const event of client.observeEvents('/customer', {
   console.log('Received event:', event)
 }
 
+// Query events using the query language
+const results = await client.queryEvents('FROM e IN events WHERE e.type == "io.genesisdb.app.customer-added" ORDER BY e.time DESC TOP 20 PROJECT INTO { subject: e.subject, firstName: e.data.firstName }');
+console.log('Query results:', results);
+
 // Use the genesisdb client status methods
 await client.audit();
 await client.ping();

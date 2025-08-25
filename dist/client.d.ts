@@ -79,6 +79,16 @@ export declare class Client {
     audit(): Promise<string>;
     ping(): Promise<string>;
     q(query: string): Promise<any[]>;
+    /**
+     * Query events using the same functionality as the q method
+     * @param query The query string to execute
+     * @returns Promise<any[]> Array of query results
+     * @example
+     * ```typescript
+     * const results = await client.queryEvents('FROM e IN events WHERE e.type == "io.genesisdb.app.customer-added" ORDER BY e.time DESC TOP 20 PROJECT INTO { subject: e.subject, firstName: e.data.firstName } }');
+     * ```
+     */
+    queryEvents(query: string): Promise<any[]>;
     observeEvents(subject: string, options?: {
         lowerBound?: string;
         includeLowerBoundEvent?: boolean;

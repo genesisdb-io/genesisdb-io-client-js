@@ -384,6 +384,19 @@ export class Client {
     }
   }
 
+  /**
+   * Query events using the same functionality as the q method
+   * @param query The query string to execute
+   * @returns Promise<any[]> Array of query results
+   * @example
+   * ```typescript
+   * const results = await client.queryEvents('FROM e IN events WHERE e.type == "io.genesisdb.app.customer-added" ORDER BY e.time DESC TOP 20 PROJECT INTO { subject: e.subject, firstName: e.data.firstName } }');
+   * ```
+   */
+  async queryEvents(query: string): Promise<any[]> {
+    return this.q(query);
+  }
+
   async *observeEvents(subject: string, options?: { lowerBound?: string, includeLowerBoundEvent?: boolean, latestByEventType?: string }): AsyncGenerator<CloudEvent<unknown>, void, unknown> {
     const url = `${this.apiUrl}/api/${this.apiVersion}/observe`;
 
