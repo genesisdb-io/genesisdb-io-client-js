@@ -151,6 +151,7 @@ export class Client {
    * ```
    * @example
    * ```typescript
+   * // Using isSubjectNew precondition
    * await client.commitEvents([
    *   {
    *     source: 'io.genesisdb.app',
@@ -164,6 +165,25 @@ export class Client {
    *     type: 'isSubjectNew',
    *     payload: {
    *       subject: '/foo/21'
+   *     }
+   *   }
+   * ]);
+   * ```
+   * @example
+   * ```typescript
+   * // Using isQueryResultTrue precondition
+   * await client.commitEvents([
+   *   {
+   *     source: 'io.genesisdb.app',
+   *     subject: '/event/conf-2024',
+   *     type: 'io.genesisdb.app.registration-added',
+   *     data: { attendeeName: 'Alice', eventId: 'conf-2024' }
+   *   }
+   * ], [
+   *   {
+   *     type: 'isQueryResultTrue',
+   *     payload: {
+   *       query: "FROM e IN events WHERE e.data.eventId == 'conf-2024' PROJECT INTO COUNT() < 500"
    *     }
    *   }
    * ]);

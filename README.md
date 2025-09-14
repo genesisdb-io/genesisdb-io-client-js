@@ -89,24 +89,6 @@ await client.commitEvents([
   }
 ]);
 
-// Commit events with preconditions
-await client.commitEvents([
-  {
-    source: 'io.genesisdb.app',
-    subject: '/foo/21',
-    type: 'io.genesisdb.app.foo-added',
-    data: {
-      value: 'Foo'
-    }
-  }
-], [
-  {
-    type: 'isSubjectNew',
-    payload: {
-      subject: '/foo/21'
-    }
-  }
-]);
 
 // Usage of referenced data (GDPR)
 await client.commitEvents([
@@ -125,6 +107,52 @@ await client.commitEvents([
 
 // Deleting referenced data (GDPR)
 await client.eraseData('/foo/21');
+
+## Preconditions
+
+Preconditions allow you to enforce certain checks on the server before committing events. Genesis DB supports multiple precondition types:
+
+### isSubjectNew
+Ensures that a subject is new (has no existing events):
+
+```typescript
+await client.commitEvents([
+  {
+    source: 'io.genesisdb.app',
+    subject: '/foo/21',
+    type: 'io.genesisdb.app.foo-added',
+    data: { value: 'Foo' }
+  }
+], [
+  {
+    type: 'isSubjectNew',
+    payload: {
+      subject: '/foo/21'
+    }
+  }
+]);
+```
+
+### isQueryResultTrue
+Evaluates a query and ensures the result is truthy:
+
+```typescript
+await client.commitEvents([
+  {
+    source: 'io.genesisdb.app',
+    subject: '/event/conf-2024',
+    type: 'io.genesisdb.app.registration-added',
+    data: { attendeeName: 'Alice', eventId: 'conf-2024' }
+  }
+], [
+  {
+    type: 'isQueryResultTrue',
+    payload: {
+      query: "FROM e IN events WHERE e.data.eventId == 'conf-2024' PROJECT INTO COUNT() < 500"
+    }
+  }
+]);
+```
 
 const encoder = new TextEncoder()
 const stream = new ReadableStream({
