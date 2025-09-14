@@ -14,38 +14,58 @@ Using yarn:
 yarn add genesisdb
 ```
 
-## Usage
+## Configuration
 
-### The following envvars are required
+### Environment Variables
+The following environment variables are required:
 ```
 GENESISDB_AUTH_TOKEN=<secret>
 GENESISDB_API_URL=http://localhost:8080
 GENESISDB_API_VERSION=v1
 ```
 
+### Basic Setup
+
 ```typescript
 import { Client } from 'genesisdb';
 
-// Initialize the genesisdb client
+// Initialize the Genesis DB client
 const client = new Client();
+```
 
-// Use the genesisdb client methods
+## Streaming Events
+
+### Basic Event Streaming
+
+```typescript
+// Stream all events for a subject
 await client.streamEvents('/customer');
+```
 
-// Stream Events from lower bound
+### Stream Events from Lower Bound
+
+```typescript
 await client.streamEvents('/', {
   lowerBound: '2d6d4141-6107-4fb2-905f-445730f4f2a9',
   includeLowerBoundEvent: true
 });
+```
 
-// Stream Events with latest by event type
+### Stream Latest Events by Event Type
+
+```typescript
 await client.streamEvents('/', {
   latestByEventType: 'io.genesisdb.foo.foobarfoo-updated'
 });
+```
 
-// This feature allows you to stream only the latest event of a specific type for each subject.
-// Useful for getting the current state of entities.
+This feature allows you to stream only the latest event of a specific type for each subject. Useful for getting the current state of entities.
 
+## Committing Events
+
+### Basic Event Committing
+
+```typescript
 await client.commitEvents([
   {
     source: 'io.genesisdb.app',
@@ -88,25 +108,7 @@ await client.commitEvents([
     }
   }
 ]);
-
-
-// Usage of referenced data (GDPR)
-await client.commitEvents([
-  {
-    source: 'io.genesisdb.app',
-    subject: '/foo/21',
-    type: 'io.genesisdb.app.foo-added',
-    data: {
-      value: 'Foo'
-    },
-    options: {
-      storeDataAsReference: true
-    }
-  }
-]);
-
-// Deleting referenced data (GDPR)
-await client.eraseData('/foo/21');
+```
 
 ## Preconditions
 
@@ -142,7 +144,10 @@ await client.commitEvents([
     source: 'io.genesisdb.app',
     subject: '/event/conf-2024',
     type: 'io.genesisdb.app.registration-added',
-    data: { attendeeName: 'Alice', eventId: 'conf-2024' }
+    data: {
+      attendeeName: 'Alice',
+      eventId: 'conf-2024'
+    }
   }
 ], [
   {
@@ -154,6 +159,37 @@ await client.commitEvents([
 ]);
 ```
 
+## GDPR Compliance
+
+### Store Data as Reference
+
+```typescript
+await client.commitEvents([
+  {
+    source: 'io.genesisdb.app',
+    subject: '/foo/21',
+    type: 'io.genesisdb.app.foo-added',
+    data: {
+      value: 'Foo'
+    },
+    options: {
+      storeDataAsReference: true
+    }
+  }
+]);
+```
+
+### Delete Referenced Data
+
+```typescript
+await client.eraseData('/foo/21');
+```
+
+## Observing Events
+
+### Basic Event Observation
+
+```typescript
 const encoder = new TextEncoder()
 const stream = new ReadableStream({
   async start(controller) {
@@ -167,23 +203,34 @@ const stream = new ReadableStream({
     }
   }
 })
+```
 
-// Observe Events from lower bound (Message queue)
+### Observe Events from Lower Bound (Message Queue)
+
+```typescript
 for await (const event of client.observeEvents('/customer', {
   lowerBound: '2d6d4141-6107-4fb2-905f-445730f4f2a9',
   includeLowerBoundEvent: true
 })) {
   console.log('Received event:', event)
 }
+```
 
-// Query events using the query language
+## Querying Events
+
+```typescript
 const results = await client.queryEvents('FROM e IN events WHERE e.type == "io.genesisdb.app.customer-added" ORDER BY e.time DESC TOP 20 PROJECT INTO { subject: e.subject, firstName: e.data.firstName }');
 console.log('Query results:', results);
+```
 
-// Use the genesisdb client status methods
-await client.audit();
+## Health Checks
+
+```typescript
+// Check API status
 await client.ping();
 
+// Run audit
+await client.audit();
 ```
 
 ## License
@@ -192,5 +239,6 @@ MIT
 
 ## Author
 
-E-Mail: mail@genesisdb.io
-URL: http://www.genesisdb.io
+* E-Mail: mail@genesisdb.io
+* URL: https://www.genesisdb.io
+* Docs: https://docs.genesisdb.io
