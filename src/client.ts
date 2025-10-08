@@ -474,6 +474,9 @@ export class Client {
             const jsonStr = line.startsWith('data: ') ? line.slice(6) : line;
             const json = JSON.parse(jsonStr);
             console.log('Parsed JSON:', json);
+            if (json.payload === '' && Object.keys(json).length === 1) {
+              continue;
+            }
             const event = new CloudEvent(json);
             console.log('Created CloudEvent:', event);
             yield event;
