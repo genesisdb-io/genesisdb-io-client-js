@@ -82,7 +82,6 @@ export class Client {
       const rawText = await res.text();
 
       if (!rawText || rawText.trim() === '') {
-        console.log('No events found for subject:', subject);
         return [];
       }
 
@@ -432,7 +431,7 @@ export class Client {
           Authorization: 'Bearer ' + this.authToken,
           'Content-Type': 'application/json',
           Accept: 'application/x-ndjson',
-          'User-Agent': 'inoovum-eventstore-sdk',
+          'User-Agent': 'genesisdb-sdk',
         },
         body: JSON.stringify(requestBody),
       });
@@ -473,12 +472,10 @@ export class Client {
           try {
             const jsonStr = line.startsWith('data: ') ? line.slice(6) : line;
             const json = JSON.parse(jsonStr);
-            console.log('Parsed JSON:', json);
             if (json.payload === '' && Object.keys(json).length === 1) {
               continue;
             }
             const event = new CloudEvent(json);
-            console.log('Created CloudEvent:', event);
             yield event;
           } catch (err) {
             console.error('Error while parsing event:', err);
