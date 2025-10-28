@@ -146,6 +146,31 @@ await client.commitEvents([
 ]);
 ```
 
+### isSubjectExisting
+Ensures that events exist for the specified subject:
+
+```typescript
+await client.commitEvents([
+  {
+    source: 'io.genesisdb.app',
+    subject: '/user/456',
+    type: 'io.genesisdb.app.user-created',
+    data: {
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john.doe@example.com'
+    }
+  }
+], [
+  {
+    type: 'isSubjectExisting',
+    payload: {
+      subject: '/user/456'
+    }
+  }
+]);
+```
+
 ### isQueryResultTrue
 Evaluates a query and ensures the result is truthy. Supports the full GDBQL feature set including complex WHERE clauses, aggregations, and calculated fields.
 
