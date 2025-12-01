@@ -1,8 +1,8 @@
 # JavaScript/TypeScript SDK
 
-This is the official JS/TS SDK for Genesis DB, an awesome and production ready event store database system for building event-driven apps.
+This is the official JS/TS SDK for GenesisDB, an awesome and production ready event store database system for building event-driven apps.
 
-## Genesis DB Advantages
+## GenesisDB Advantages
 
 * Incredibly fast when reading, fast when writing 🚀
 * Easy backup creation and recovery
@@ -11,7 +11,7 @@ This is the official JS/TS SDK for Genesis DB, an awesome and production ready e
 * Easily accessible via the HTTP interface
 * Auditable. Guarantee database consistency
 * Logging and metrics for Prometheus
-* SQL like query language called Genesis DB Query Language (GDBQL)
+* SQL like query language called GenesisDB Query Language (GDBQL)
 * ...
 
 ## Installation
@@ -35,7 +35,7 @@ GENESISDB_API_VERSION=v1
 ```typescript
 import { Client } from 'genesisdb';
 
-// Initialize the Genesis DB client
+// Initialize the GenesisDB client
 const client = new Client();
 ```
 
@@ -119,7 +119,7 @@ await client.commitEvents([
 
 ## Preconditions
 
-Preconditions allow you to enforce certain checks on the server before committing events. Genesis DB supports multiple precondition types:
+Preconditions allow you to enforce certain checks on the server before committing events. GenesisDB supports multiple precondition types:
 
 ### isSubjectNew
 Ensures that a subject is new (has no existing events):

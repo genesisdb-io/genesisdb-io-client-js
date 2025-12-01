@@ -1,7 +1,7 @@
 {
   "name": "genesisdb",
   "version": "1.1.2",
-  "description": "Genesis DB SDK",
+  "description": "GenesisDB SDK",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [

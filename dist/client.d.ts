@@ -15,7 +15,7 @@ export declare class Client {
         latestByEventType?: string;
     }): Promise<CloudEvent<unknown>[]>;
     /**
-     * Commits events to Genesis DB
+     * Commits events to GenesisDB
      * @param events Array of events to commit
      * @param preconditions Optional array of preconditions to check before committing
      * @example

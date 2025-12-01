@@ -128,7 +128,7 @@ export class Client {
   }
 
   /**
-   * Commits events to Genesis DB
+   * Commits events to GenesisDB
    * @param events Array of events to commit
    * @param preconditions Optional array of preconditions to check before committing
    * @example
