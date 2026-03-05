@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --test:*)",
+      "Bash(test:*)",
+      "Bash(node -r ./load-env.js --test --import tsx:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

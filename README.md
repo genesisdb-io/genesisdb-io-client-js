@@ -57,6 +57,25 @@ await client.streamEvents('/', {
 });
 ```
 
+### Stream Events with Upper Bound
+
+```typescript
+await client.streamEvents('/', {
+  upperBound: '9f3e4141-7208-4fb2-905f-445730f4f3b1',
+  includeUpperBoundEvent: false
+});
+```
+
+### Stream Events with Both Lower and Upper Bounds
+
+```typescript
+await client.streamEvents('/', {
+  lowerBound: '2d6d4141-6107-4fb2-905f-445730f4f2a9',
+  includeLowerBoundEvent: true,
+  upperBound: '9f3e4141-7208-4fb2-905f-445730f4f3b1',
+  includeUpperBoundEvent: false
+});
+```
 
 ### Stream Latest Events by Event Type
 
@@ -312,6 +331,29 @@ for await (const event of client.observeEvents('/customer', {
 }
 ```
 
+### Observe Events with Upper Bound (Message Queue)
+
+```typescript
+for await (const event of client.observeEvents('/customer', {
+  upperBound: '9f3e4141-7208-4fb2-905f-445730f4f3b1',
+  includeUpperBoundEvent: false
+})) {
+  console.log('Received event:', event)
+}
+```
+
+### Observe Events with Both Bounds (Message Queue)
+
+```typescript
+for await (const event of client.observeEvents('/customer', {
+  lowerBound: '2d6d4141-6107-4fb2-905f-445730f4f2a9',
+  includeLowerBoundEvent: true,
+  upperBound: '9f3e4141-7208-4fb2-905f-445730f4f3b1',
+  includeUpperBoundEvent: false
+})) {
+  console.log('Received event:', event)
+}
+```
 
 ### Observe Latest Events by Event Type (Message Queue)
 

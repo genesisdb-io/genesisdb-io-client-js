@@ -1,6 +1,18 @@
 import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert';
-import { Client } from './client';
+import {
+  Client,
+  ClientConfig,
+  CommitEvent,
+  CommitEventOptions,
+  StreamOptions,
+  Precondition,
+  IsSubjectNewPrecondition,
+  IsSubjectExistingPrecondition,
+  IsQueryResultTruePrecondition,
+  GenericPrecondition,
+  TypedPrecondition,
+} from './client';
 import { CloudEvent } from 'cloudevents';
 
 describe('Client', () => {
@@ -112,6 +124,50 @@ describe('Client', () => {
       });
     });
 
+    it('should stream events with upper bound', async () => {
+      fetchMock.mock.mockImplementation(() => Promise.resolve({
+        ok: true,
+        text: async () => '',
+        headers: new Headers()
+      }));
+
+      await client.streamEvents('/test', {
+        upperBound: '456',
+        includeUpperBoundEvent: false
+      });
+
+      const calls = fetchMock.mock.calls;
+      const body = JSON.parse(calls[0].arguments[1].body);
+      assert.deepStrictEqual(body.options, {
+        upperBound: '456',
+        includeUpperBoundEvent: false
+      });
+    });
+
+    it('should stream events with both lower and upper bounds', async () => {
+      fetchMock.mock.mockImplementation(() => Promise.resolve({
+        ok: true,
+        text: async () => '',
+        headers: new Headers()
+      }));
+
+      await client.streamEvents('/test', {
+        lowerBound: '123',
+        includeLowerBoundEvent: true,
+        upperBound: '456',
+        includeUpperBoundEvent: true
+      });
+
+      const calls = fetchMock.mock.calls;
+      const body = JSON.parse(calls[0].arguments[1].body);
+      assert.deepStrictEqual(body.options, {
+        lowerBound: '123',
+        includeLowerBoundEvent: true,
+        upperBound: '456',
+        includeUpperBoundEvent: true
+      });
+    });
+
     it('should handle empty response', async () => {
       fetchMock.mock.mockImplementation(() => Promise.resolve({
         ok: true,
@@ -215,7 +271,7 @@ describe('Client', () => {
         headers: new Headers()
       }));
 
-      const preconditions = [
+      const preconditions: Precondition[] = [
         {
           type: 'isSubjectNew',
           payload: { subject: '/test/subject' }
@@ -237,6 +293,101 @@ describe('Client', () => {
       const calls = fetchMock.mock.calls;
       const body = JSON.parse(calls[0].arguments[1].body);
       assert.deepStrictEqual(body.preconditions, preconditions);
+    });
+
+    it('should commit events with isSubjectExisting precondition', async () => {
+      fetchMock.mock.mockImplementation(() => Promise.resolve({
+        ok: true,
+        headers: new Headers()
+      }));
+
+      const preconditions: IsSubjectExistingPrecondition[] = [
+        {
+          type: 'isSubjectExisting',
+          payload: { subject: '/test/subject' }
+        }
+      ];
+
+      await client.commitEvents(
+        [{ source: 'test', subject: '/test/subject', type: 'test.updated', data: { v: 2 } }],
+        preconditions
+      );
+
+      const body = JSON.parse(fetchMock.mock.calls[0].arguments[1].body);
+      assert.deepStrictEqual(body.preconditions, preconditions);
+    });
+
+    it('should commit events with isQueryResultTrue precondition', async () => {
+      fetchMock.mock.mockImplementation(() => Promise.resolve({
+        ok: true,
+        headers: new Headers()
+      }));
+
+      const preconditions: IsQueryResultTruePrecondition[] = [
+        {
+          type: 'isQueryResultTrue',
+          payload: { query: "STREAM e FROM events WHERE e.subject == '/test' MAP COUNT() < 100" }
+        }
+      ];
+
+      await client.commitEvents(
+        [{ source: 'test', subject: '/test', type: 'test.created', data: {} }],
+        preconditions
+      );
+
+      const body = JSON.parse(fetchMock.mock.calls[0].arguments[1].body);
+      assert.deepStrictEqual(body.preconditions, preconditions);
+    });
+
+    it('should commit events with multiple mixed preconditions', async () => {
+      fetchMock.mock.mockImplementation(() => Promise.resolve({
+        ok: true,
+        headers: new Headers()
+      }));
+
+      const preconditions: Precondition[] = [
+        {
+          type: 'isSubjectExisting',
+          payload: { subject: '/user/456' }
+        },
+        {
+          type: 'isQueryResultTrue',
+          payload: { query: "STREAM e FROM events WHERE e.data.email == 'john.doe@example.com' MAP COUNT() == 0" }
+        }
+      ];
+
+      await client.commitEvents(
+        [{ source: 'test', subject: '/user/456', type: 'test.user-updated', data: { name: 'Jane' } }],
+        preconditions
+      );
+
+      const body = JSON.parse(fetchMock.mock.calls[0].arguments[1].body);
+      assert.strictEqual(body.preconditions.length, 2);
+      assert.strictEqual(body.preconditions[0].type, 'isSubjectExisting');
+      assert.strictEqual(body.preconditions[1].type, 'isQueryResultTrue');
+    });
+
+    it('should commit events with generic precondition (backward compatibility)', async () => {
+      fetchMock.mock.mockImplementation(() => Promise.resolve({
+        ok: true,
+        headers: new Headers()
+      }));
+
+      const preconditions: GenericPrecondition[] = [
+        {
+          type: 'someCustomFuturePrecondition',
+          payload: { foo: 'bar', baz: 123 }
+        }
+      ];
+
+      await client.commitEvents(
+        [{ source: 'test', subject: '/test', type: 'test.created', data: {} }],
+        preconditions
+      );
+
+      const body = JSON.parse(fetchMock.mock.calls[0].arguments[1].body);
+      assert.deepStrictEqual(body.preconditions[0].type, 'someCustomFuturePrecondition');
+      assert.deepStrictEqual(body.preconditions[0].payload, { foo: 'bar', baz: 123 });
     });
 
     it('should handle API errors', async () => {
@@ -383,13 +534,13 @@ describe('Client', () => {
         headers: new Headers()
       }));
 
-      const results = await client.q('FROM e IN events PROJECT INTO e.data');
+      const results = await client.q('STREAM e FROM events MAP e.data');
 
       assert.deepStrictEqual(results, queryResults);
       const calls = fetchMock.mock.calls;
       assert.strictEqual(calls[0].arguments[0], 'http://localhost:8080/api/v1/q');
       const body = JSON.parse(calls[0].arguments[1].body);
-      assert.strictEqual(body.query, 'FROM e IN events PROJECT INTO e.data');
+      assert.strictEqual(body.query, 'STREAM e FROM events MAP e.data');
     });
 
     it('should handle empty query results', async () => {
@@ -399,7 +550,7 @@ describe('Client', () => {
         headers: new Headers()
       }));
 
-      const results = await client.q('FROM e IN events WHERE false');
+      const results = await client.q('STREAM e FROM events WHERE false');
       assert.deepStrictEqual(results, []);
     });
 
@@ -432,12 +583,12 @@ describe('Client', () => {
         headers: new Headers()
       }));
 
-      const results = await client.queryEvents('FROM e IN events');
+      const results = await client.queryEvents('STREAM e FROM events');
 
       assert.deepStrictEqual(results, queryResults);
       const calls = fetchMock.mock.calls;
       const body = JSON.parse(calls[0].arguments[1].body);
-      assert.strictEqual(body.query, 'FROM e IN events');
+      assert.strictEqual(body.query, 'STREAM e FROM events');
     });
   });
 
@@ -526,6 +677,40 @@ describe('Client', () => {
       assert.deepStrictEqual(body.options, {
         lowerBound: '123',
         includeLowerBoundEvent: true
+      });
+    });
+
+    it('should handle observe with upper bound', async () => {
+      const mockReadableStream = new ReadableStream({
+        start(controller) {
+          controller.close();
+        }
+      });
+
+      fetchMock.mock.mockImplementation(() => Promise.resolve({
+        ok: true,
+        body: mockReadableStream,
+        headers: new Headers()
+      }));
+
+      const generator = client.observeEvents('/test', {
+        lowerBound: '123',
+        includeLowerBoundEvent: true,
+        upperBound: '456',
+        includeUpperBoundEvent: false
+      });
+
+      for await (const _ of generator) {
+        break;
+      }
+
+      const calls = fetchMock.mock.calls;
+      const body = JSON.parse(calls[0].arguments[1].body);
+      assert.deepStrictEqual(body.options, {
+        lowerBound: '123',
+        includeLowerBoundEvent: true,
+        upperBound: '456',
+        includeUpperBoundEvent: false
       });
     });
 

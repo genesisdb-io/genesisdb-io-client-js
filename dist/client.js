@@ -108,63 +108,132 @@ class Client {
     /**
      * Commits events to GenesisDB
      * @param events Array of events to commit
-     * @param preconditions Optional array of preconditions to check before committing
+     * @param preconditions Optional array of preconditions to check before committing.
+     *   If a precondition fails, the server returns HTTP 412 (Precondition Failed).
+     *
      * @example
      * ```typescript
+     * // Basic commit
      * await client.commitEvents([
      *   {
      *     source: 'io.genesisdb.app',
-     *     subject: '/user',
-     *     type: 'io.genesisdb.app.user-added',
-     *     data: { name: 'John' }
+     *     subject: '/customer',
+     *     type: 'io.genesisdb.app.customer-added',
+     *     data: {
+     *       firstName: 'Bruce',
+     *       lastName: 'Wayne',
+     *       emailAddress: 'bruce.wayne@enterprise.wayne'
+     *     }
      *   },
      *   {
      *     source: 'io.genesisdb.app',
-     *     subject: '/user/6db0dbbe-218e-4518-b740-93b6e11e6190',
-     *     type: 'io.genesisdb.app.user-updated',
-     *     data: { name: 'John Smith' }
+     *     subject: '/customer',
+     *     type: 'io.genesisdb.app.customer-added',
+     *     data: {
+     *       firstName: 'Alfred',
+     *       lastName: 'Pennyworth',
+     *       emailAddress: 'alfred.pennyworth@enterprise.wayne'
+     *     }
+     *   },
+     *   {
+     *     source: 'io.genesisdb.store',
+     *     subject: '/article',
+     *     type: 'io.genesisdb.store.article-added',
+     *     data: {
+     *       name: 'Tumbler',
+     *       color: 'black',
+     *       price: 2990000.00
+     *     }
      *   }
      * ]);
      * ```
+     *
      * @example
      * ```typescript
      * // Using isSubjectNew precondition
      * await client.commitEvents([
      *   {
      *     source: 'io.genesisdb.app',
-     *     subject: '/foo/21',
-     *     type: 'io.genesisdb.app.foo-added',
-     *     data: { value: 'Foo' },
-     *     options: { storeDataAsReference: true }
+     *     subject: '/user/456',
+     *     type: 'io.genesisdb.app.user-created',
+     *     data: {
+     *       firstName: 'John',
+     *       lastName: 'Doe',
+     *       email: 'john.doe@example.com'
+     *     }
      *   }
      * ], [
      *   {
      *     type: 'isSubjectNew',
-     *     payload: {
-     *       subject: '/foo/21'
-     *     }
+     *     payload: { subject: '/user/456' }
      *   }
      * ]);
      * ```
+     *
+     * @example
+     * ```typescript
+     * // Using isSubjectExisting precondition
+     * await client.commitEvents([
+     *   {
+     *     source: 'io.genesisdb.app',
+     *     subject: '/user/456',
+     *     type: 'io.genesisdb.app.user-created',
+     *     data: {
+     *       firstName: 'John',
+     *       lastName: 'Doe',
+     *       email: 'john.doe@example.com'
+     *     }
+     *   }
+     * ], [
+     *   {
+     *     type: 'isSubjectExisting',
+     *     payload: { subject: '/user/456' }
+     *   }
+     * ]);
+     * ```
+     *
      * @example
      * ```typescript
      * // Using isQueryResultTrue precondition
      * await client.commitEvents([
      *   {
      *     source: 'io.genesisdb.app',
-     *     subject: '/event/conf-2024',
-     *     type: 'io.genesisdb.app.registration-added',
-     *     data: { attendeeName: 'Alice', eventId: 'conf-2024' }
+     *     subject: '/user/456',
+     *     type: 'io.genesisdb.app.user-created',
+     *     data: {
+     *       firstName: 'John',
+     *       lastName: 'Doe',
+     *       email: 'john.doe@example.com'
+     *     }
      *   }
      * ], [
      *   {
      *     type: 'isQueryResultTrue',
      *     payload: {
-     *       query: "FROM e IN events WHERE e.data.eventId == 'conf-2024' PROJECT INTO COUNT() < 500"
+     *       query: "STREAM e FROM events WHERE e.data.email == 'john.doe@example.com' MAP COUNT() == 0"
      *     }
      *   }
      * ]);
      * ```
+     *
+     * @example
+     * ```typescript
+     * // GDPR: Store data as reference
+     * await client.commitEvents([
+     *   {
+     *     source: 'io.genesisdb.app',
+     *     subject: '/user/456',
+     *     type: 'io.genesisdb.app.user-created',
+     *     data: {
+     *       firstName: 'John',
+     *       lastName: 'Doe',
+     *       email: 'john.doe@example.com'
+     *     },
+     *     options: { storeDataAsReference: true }
+     *   }
+     * ]);
+     * ```
+     *
      */
     async commitEvents(events, preconditions) {
         const url = `${this.apiUrl}/api/${this.apiVersion}/commit`;
@@ -214,7 +283,7 @@ class Client {
      * @param subject The subject to erase data for
      * @example
      * ```typescript
-     * await client.eraseData('/foo/21');
+     * await client.eraseData('/user/456');
      * ```
      */
     async eraseData(subject) {
@@ -364,7 +433,7 @@ class Client {
      * @returns Promise<any[]> Array of query results
      * @example
      * ```typescript
-     * const results = await client.queryEvents('FROM e IN events WHERE e.type == "io.genesisdb.app.customer-added" ORDER BY e.time DESC TOP 20 PROJECT INTO { subject: e.subject, firstName: e.data.firstName } }');
+     * const results = await client.queryEvents("STREAM e FROM events WHERE e.subject UNDER '/customer' ORDER BY e.time MAP { id: e.id, firstName: e.data.firstName }");
      * ```
      */
     async queryEvents(query) {
@@ -401,32 +470,37 @@ class Client {
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) {
-                    break;
-                }
-                buffer += decoder.decode(value, { stream: true });
-                let newlineIndex;
-                while ((newlineIndex = buffer.indexOf('\n')) >= 0) {
-                    const line = buffer.slice(0, newlineIndex).trim();
-                    buffer = buffer.slice(newlineIndex + 1);
-                    if (!line)
-                        continue;
-                    try {
-                        const jsonStr = line.startsWith('data: ') ? line.slice(6) : line;
-                        const json = JSON.parse(jsonStr);
-                        if (json.payload === '' && Object.keys(json).length === 1) {
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) {
+                        break;
+                    }
+                    buffer += decoder.decode(value, { stream: true });
+                    let newlineIndex;
+                    while ((newlineIndex = buffer.indexOf('\n')) >= 0) {
+                        const line = buffer.slice(0, newlineIndex).trim();
+                        buffer = buffer.slice(newlineIndex + 1);
+                        if (!line)
                             continue;
+                        try {
+                            const jsonStr = line.startsWith('data: ') ? line.slice(6) : line;
+                            const json = JSON.parse(jsonStr);
+                            if (json.payload === '' && Object.keys(json).length === 1) {
+                                continue;
+                            }
+                            const event = new cloudevents_1.CloudEvent(json);
+                            yield event;
                         }
-                        const event = new cloudevents_1.CloudEvent(json);
-                        yield event;
-                    }
-                    catch (err) {
-                        console.error('Error while parsing event:', err);
-                        console.error('Problem with JSON:', line);
+                        catch (err) {
+                            console.error('Error while parsing event:', err);
+                            console.error('Problem with JSON:', line);
+                        }
                     }
                 }
+            }
+            finally {
+                reader.cancel();
             }
         }
         catch (error) {
