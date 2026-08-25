@@ -3,19 +3,26 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish_existing:
+        description: Publish the version currently in package.json without bumping it
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   release:
-    if: "!contains(github.event.head_commit.message, 'skip-ci')"
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, 'skip-ci')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
 
       - run: npm ci
@@ -23,12 +30,14 @@ jobs:
       - run: npm test
 
       - name: Bump version
+        if: github.event_name == 'push' || inputs.publish_existing == false
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           npm version patch -m "v%s [skip-ci]"
 
       - name: Push tag
+        if: github.event_name == 'push' || inputs.publish_existing == false
         run: git push --follow-tags
 
       - name: Publish to npm
