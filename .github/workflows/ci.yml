@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      genesisdb:
+        image: genesisdb/genesisdb:latest
+        env:
+          GENESISDB_AUTH_TOKEN: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        ports:
+          - 8080:8080
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:integration
+        env:
+          GENESISDB_URL: http://localhost:8080
+          GENESISDB_AUTH_TOKEN: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef

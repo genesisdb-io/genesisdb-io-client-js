@@ -1,565 +1,268 @@
-import { CloudEvent } from 'cloudevents';
-import { ClientConfig } from './config';
-import { CommitEvent } from './events';
-import { StreamOptions } from './stream-options';
-import { Precondition } from './preconditions';
+import { errorForResponse, GenesisDBError } from './errors.js';
+import type {
+  ClientConfig,
+  Event,
+  FetchOptions,
+  NewEvent,
+  Precondition,
+  RegisteredSchema,
+  Schema,
+  Status,
+  SubscribeOptions,
+} from './types.js';
 
+const userAgent = 'genesisdb-js/2';
+
+/**
+ * Client for the GenesisDB HTTP API.
+ *
+ * ```ts
+ * const db = new Client({ url: 'http://localhost:8080', token: process.env.GENESISDB_AUTH_TOKEN });
+ * await db.commit([{ source: 'app', subject: '/customer/1', type: 'customer.created', data: { name: 'Bruce' } }]);
+ * const events = await db.fetch('/customer');
+ * ```
+ *
+ * Every method throws {@link GenesisDBError} (or a subclass) on a non-2xx answer.
+ */
 export class Client {
-  private apiUrl: string;
-  private apiVersion: string;
-  private authToken: string;
+  private readonly url: string;
+  private readonly token: string;
+  private readonly timeoutMs: number;
+  private readonly fetchImpl: typeof fetch;
 
-  private checkRequiredEnv() {
-    const requiredEnvVars = [
-      'GENESISDB_API_URL',
-      'GENESISDB_API_VERSION',
-      'GENESISDB_AUTH_TOKEN',
-    ];
-
-    const missingEnvVars = requiredEnvVars.filter(
-      envVar => !process.env[envVar]
-    );
-
-    if (missingEnvVars.length > 0) {
-      console.error('Missing required environment variables:', missingEnvVars.join(', '));
-      throw new Error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  constructor(config: ClientConfig = {}) {
+    const env = typeof process !== 'undefined' ? process.env : ({} as Record<string, string | undefined>);
+    const url = config.url ?? env.GENESISDB_URL;
+    const token = config.token ?? env.GENESISDB_AUTH_TOKEN;
+    if (!url) {
+      throw new Error('GenesisDB URL missing: pass { url } or set GENESISDB_URL');
+    }
+    if (!token) {
+      throw new Error('GenesisDB token missing: pass { token } or set GENESISDB_AUTH_TOKEN');
+    }
+    this.url = url.replace(/\/+$/, '');
+    this.token = token;
+    this.timeoutMs = config.timeoutMs ?? 30_000;
+    this.fetchImpl = config.fetch ?? globalThis.fetch;
+    if (!this.fetchImpl) {
+      throw new Error('No fetch available: pass { fetch } or use Node 18 or newer');
     }
   }
 
-  constructor(config?: ClientConfig) {
-    if (config) {
-      const envApiUrl = process.env.GENESISDB_API_URL;
-      const envApiVersion = process.env.GENESISDB_API_VERSION;
-      const envAuthToken = process.env.GENESISDB_AUTH_TOKEN;
+  // Health and status
 
-      this.apiUrl = config.apiUrl || envApiUrl || '';
-      this.apiVersion = config.apiVersion || envApiVersion || '';
-      this.authToken = config.authToken || envAuthToken || '';
-
-      if (!this.apiUrl || !this.apiVersion || !this.authToken) {
-        this.checkRequiredEnv();
-        this.apiUrl = process.env.GENESISDB_API_URL!;
-        this.apiVersion = process.env.GENESISDB_API_VERSION!;
-        this.authToken = process.env.GENESISDB_AUTH_TOKEN!;
-      }
-    } else {
-      this.checkRequiredEnv();
-      this.apiUrl = process.env.GENESISDB_API_URL!;
-      this.apiVersion = process.env.GENESISDB_API_VERSION!;
-      this.authToken = process.env.GENESISDB_AUTH_TOKEN!;
-    }
-  }
-
-  async streamEvents(subject: string, options?: StreamOptions) {
-    const url = `${this.apiUrl}/api/${this.apiVersion}/stream`;
-
-    const requestBody: any = { subject: subject };
-    if (options) {
-      requestBody.options = options;
-    }
-
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + this.authToken,
-          'Content-Type': 'application/json',
-          Accept: 'application/x-ndjson',
-          'User-Agent': 'genesisdb-sdk',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!res.ok) {
-        console.error('API Error:', {
-          status: res.status,
-          statusText: res.statusText,
-          headers: Object.fromEntries(res.headers)
-        });
-        throw new Error(`API Error: ${res.status} ${res.statusText}`);
-      }
-
-      const rawText = await res.text();
-
-      if (!rawText || rawText.trim() === '') {
-        return [];
-      }
-
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(rawText));
-          controller.close();
-        }
-      });
-
-      const reader = stream.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      const events: CloudEvent<unknown>[] = [];
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        let newlineIndex;
-        while ((newlineIndex = buffer.indexOf('\n')) >= 0) {
-          const line = buffer.slice(0, newlineIndex).trim();
-          buffer = buffer.slice(newlineIndex + 1);
-
-          if (!line) continue;
-
-          try {
-            const json = JSON.parse(line);
-            const event = new CloudEvent(json);
-            events.push(event);
-          } catch (err) {
-            console.error('Error while parsing event:', err);
-            console.error('Problem with JSON:', line);
-          }
-        }
-      }
-      return events;
-
-    } catch (error) {
-      console.error('Error while streaming events:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Commits events to GenesisDB
-   * @param events Array of events to commit
-   * @param preconditions Optional array of preconditions to check before committing.
-   *   If a precondition fails, the server returns HTTP 412 (Precondition Failed).
-   *
-   * @example
-   * ```typescript
-   * // Basic commit
-   * await client.commitEvents([
-   *   {
-   *     source: 'io.genesisdb.app',
-   *     subject: '/customer',
-   *     type: 'io.genesisdb.app.customer-added',
-   *     data: {
-   *       firstName: 'Bruce',
-   *       lastName: 'Wayne',
-   *       emailAddress: 'bruce.wayne@enterprise.wayne'
-   *     }
-   *   },
-   *   {
-   *     source: 'io.genesisdb.app',
-   *     subject: '/customer',
-   *     type: 'io.genesisdb.app.customer-added',
-   *     data: {
-   *       firstName: 'Alfred',
-   *       lastName: 'Pennyworth',
-   *       emailAddress: 'alfred.pennyworth@enterprise.wayne'
-   *     }
-   *   },
-   *   {
-   *     source: 'io.genesisdb.store',
-   *     subject: '/article',
-   *     type: 'io.genesisdb.store.article-added',
-   *     data: {
-   *       name: 'Tumbler',
-   *       color: 'black',
-   *       price: 2990000.00
-   *     }
-   *   }
-   * ]);
-   * ```
-   *
-   * @example
-   * ```typescript
-   * // Using isSubjectNew precondition
-   * await client.commitEvents([
-   *   {
-   *     source: 'io.genesisdb.app',
-   *     subject: '/user/456',
-   *     type: 'io.genesisdb.app.user-created',
-   *     data: {
-   *       firstName: 'John',
-   *       lastName: 'Doe',
-   *       email: 'john.doe@example.com'
-   *     }
-   *   }
-   * ], [
-   *   {
-   *     type: 'isSubjectNew',
-   *     payload: { subject: '/user/456' }
-   *   }
-   * ]);
-   * ```
-   *
-   * @example
-   * ```typescript
-   * // Using isSubjectExisting precondition
-   * await client.commitEvents([
-   *   {
-   *     source: 'io.genesisdb.app',
-   *     subject: '/user/456',
-   *     type: 'io.genesisdb.app.user-created',
-   *     data: {
-   *       firstName: 'John',
-   *       lastName: 'Doe',
-   *       email: 'john.doe@example.com'
-   *     }
-   *   }
-   * ], [
-   *   {
-   *     type: 'isSubjectExisting',
-   *     payload: { subject: '/user/456' }
-   *   }
-   * ]);
-   * ```
-   *
-   * @example
-   * ```typescript
-   * // Using isQueryResultTrue precondition
-   * await client.commitEvents([
-   *   {
-   *     source: 'io.genesisdb.app',
-   *     subject: '/user/456',
-   *     type: 'io.genesisdb.app.user-created',
-   *     data: {
-   *       firstName: 'John',
-   *       lastName: 'Doe',
-   *       email: 'john.doe@example.com'
-   *     }
-   *   }
-   * ], [
-   *   {
-   *     type: 'isQueryResultTrue',
-   *     payload: {
-   *       query: "STREAM e FROM events WHERE e.data.email == 'john.doe@example.com' MAP COUNT() == 0"
-   *     }
-   *   }
-   * ]);
-   * ```
-   *
-   * @example
-   * ```typescript
-   * // GDPR: Store data as reference
-   * await client.commitEvents([
-   *   {
-   *     source: 'io.genesisdb.app',
-   *     subject: '/user/456',
-   *     type: 'io.genesisdb.app.user-created',
-   *     data: {
-   *       firstName: 'John',
-   *       lastName: 'Doe',
-   *       email: 'john.doe@example.com'
-   *     },
-   *     options: { storeDataAsReference: true }
-   *   }
-   * ]);
-   * ```
-   *
-   */
-  async commitEvents(
-    events: CommitEvent[],
-    preconditions?: Precondition[]
-  ) {
-    const url = `${this.apiUrl}/api/${this.apiVersion}/commit`;
-
-    const requestBody: any = {
-      events: events.map(event => {
-        const eventData: any = {
-          source: event.source,
-          subject: event.subject,
-          type: event.type,
-          data: event.data
-        };
-        if (event.options) {
-          eventData.options = event.options;
-        }
-        return eventData;
-      })
-    };
-
-    if (preconditions && preconditions.length > 0) {
-      requestBody.preconditions = preconditions;
-    }
-
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + this.authToken,
-          'Content-Type': 'application/json',
-          'User-Agent': 'genesisdb-sdk',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!res.ok) {
-        console.error('API Error:', {
-          status: res.status,
-          statusText: res.statusText,
-          headers: Object.fromEntries(res.headers)
-        });
-        throw new Error(`API Error: ${res.status} ${res.statusText}`);
-      }
-    } catch (error) {
-      console.error('Error while committing events:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Erase data for a subject (GDPR compliance)
-   * @param subject The subject to erase data for
-   * @example
-   * ```typescript
-   * await client.eraseData('/user/456');
-   * ```
-   */
-  async eraseData(subject: string) {
-    const url = `${this.apiUrl}/api/${this.apiVersion}/erase`;
-
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + this.authToken,
-          'Content-Type': 'application/json',
-          'User-Agent': 'genesisdb-sdk',
-        },
-        body: JSON.stringify({ subject }),
-      });
-
-      if (!res.ok) {
-        console.error('API Error:', {
-          status: res.status,
-          statusText: res.statusText,
-          headers: Object.fromEntries(res.headers)
-        });
-        throw new Error(`API Error: ${res.status} ${res.statusText}`);
-      }
-    } catch (error) {
-      console.error('Error while erasing data:', error);
-      throw error;
-    }
-  }
-
-  async audit() {
-    const url = `${this.apiUrl}/api/${this.apiVersion}/status/audit`;
-
-    try {
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: 'Bearer ' + this.authToken,
-          'Content-Type': 'text/plain',
-          'User-Agent': 'genesisdb-sdk',
-        }
-      });
-
-      if (!res.ok) {
-        console.error('API Error:', {
-          status: res.status,
-          statusText: res.statusText,
-          headers: Object.fromEntries(res.headers)
-        });
-        throw new Error(`API Error: ${res.status} ${res.statusText}`);
-      }
-
-      return await res.text();
-    } catch (error) {
-      console.error('Error while running audit:', error);
-      throw error;
-    }
-  }
-
+  /** Liveness check, no token required by the server. Resolves to "Pong". */
   async ping(): Promise<string> {
-    const url = `${this.apiUrl}/api/${this.apiVersion}/status/ping`;
-
-    try {
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: 'Bearer ' + this.authToken,
-          'Content-Type': 'text/plain',
-          'User-Agent': 'genesisdb-sdk',
-        }
-      });
-
-      if (!res.ok) {
-        console.error('API Error:', {
-          status: res.status,
-          statusText: res.statusText,
-          headers: Object.fromEntries(res.headers)
-        });
-        throw new Error(`API Error: ${res.status} ${res.statusText}`);
-      }
-
-      return await res.text();
-    } catch (error) {
-      console.error('Error while pinging:', error);
-      throw error;
-    }
+    return this.text('GET', '/ping', undefined, 'ping');
   }
 
-  async q(query: string): Promise<any[]> {
-    const url = `${this.apiUrl}/api/${this.apiVersion}/q`;
+  /** Engine version, host, event counts, storage format and readiness. */
+  async status(): Promise<Status> {
+    return this.json<Status>('GET', '/api/v1/status', undefined, 'status');
+  }
 
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + this.authToken,
-          'Content-Type': 'application/json',
-          Accept: 'application/x-ndjson',
-          'User-Agent': 'genesisdb-sdk',
-        },
-        body: JSON.stringify({ query })
-      });
+  /** Verify the hash chain of the whole store. Administrator token. Resolves to the audit text. */
+  async audit(): Promise<string> {
+    return this.text('GET', '/api/v1/status/audit', undefined, 'audit');
+  }
 
-      if (!res.ok) {
-        console.error('API Error:', {
-          status: res.status,
-          statusText: res.statusText,
-          headers: Object.fromEntries(res.headers)
-        });
-        throw new Error(`API Error: ${res.status} ${res.statusText}`);
-      }
+  // Events
 
-      const rawText = await res.text();
-
-      if (!rawText || rawText.trim() === '') {
-        return [];
-      }
-
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(rawText));
-          controller.close();
-        }
-      });
-
-      const reader = stream.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      const results: any[] = [];
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        let newlineIndex;
-        while ((newlineIndex = buffer.indexOf('\n')) >= 0) {
-          const line = buffer.slice(0, newlineIndex).trim();
-          buffer = buffer.slice(newlineIndex + 1);
-
-          if (!line) continue;
-
-          try {
-            const json = JSON.parse(line);
-            results.push(json);
-          } catch (err) {
-            console.error('Error while parsing result:', err);
-            console.error('Problem with JSON:', line);
-          }
-        }
-      }
-      return results;
-
-    } catch (error) {
-      console.error('Error while querying:', error);
-      throw error;
+  /**
+   * Commit events atomically, with optional preconditions. Resolves to the stored events with
+   * ID, time and hashes. Throws {@link PreconditionFailedError} when a precondition does not hold.
+   */
+  async commit<T = unknown>(events: NewEvent<T>[], preconditions: Precondition[] = []): Promise<Event<T>[]> {
+    if (events.length === 0) {
+      throw new Error('commit requires at least one event');
     }
+    const body: Record<string, unknown> = { events };
+    if (preconditions.length > 0) {
+      body.preconditions = preconditions;
+    }
+    return this.ndjson<Event<T>>('POST', '/api/v1/commit', body, 'commit');
+  }
+
+  /** Fetch the events of a subject and all of its descendants, in commit order. */
+  async fetch<T = unknown>(subject: string, options?: FetchOptions): Promise<Event<T>[]> {
+    const body: Record<string, unknown> = { subject };
+    if (options && Object.keys(options).length > 0) {
+      body.options = options;
+    }
+    return this.ndjson<Event<T>>('POST', '/api/v1/fetch', body, 'fetch');
   }
 
   /**
-   * Query events using the same functionality as the q method
-   * @param query The query string to execute
-   * @returns Promise<any[]> Array of query results
-   * @example
-   * ```typescript
-   * const results = await client.queryEvents("STREAM e FROM events WHERE e.subject UNDER '/customer' ORDER BY e.time MAP { id: e.id, firstName: e.data.firstName }");
+   * Subscribe to a subject and its descendants. Yields the existing history first, then new
+   * events as they are committed. Runs until the signal aborts or the server closes the stream.
+   *
+   * ```ts
+   * const controller = new AbortController();
+   * for await (const event of db.subscribe('/order', { signal: controller.signal })) { ... }
    * ```
    */
-  async queryEvents(query: string): Promise<any[]> {
-    return this.q(query);
-  }
-
-  async *observeEvents(subject: string, options?: StreamOptions): AsyncGenerator<CloudEvent<unknown>, void, unknown> {
-    const url = `${this.apiUrl}/api/${this.apiVersion}/observe`;
-
-    const requestBody: any = { subject: subject };
-    if (options) {
-      requestBody.options = options;
+  async *subscribe<T = unknown>(
+    subject: string,
+    options: SubscribeOptions & { signal?: AbortSignal } = {},
+  ): AsyncGenerator<Event<T>, void, undefined> {
+    const { signal, interval, ...fetchOptions } = options;
+    const body: Record<string, unknown> = { subject };
+    if (interval !== undefined) {
+      body.interval = interval;
     }
-
+    if (Object.keys(fetchOptions).length > 0) {
+      body.options = fetchOptions;
+    }
+    const response = await this.fetchImpl(this.url + '/api/v1/subscribe', {
+      method: 'POST',
+      headers: this.headers('application/json'),
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!response.ok) {
+      throw errorForResponse(response.status, await response.text(), 'subscribe');
+    }
+    if (!response.body) {
+      throw new GenesisDBError(response.status, 'response has no body', 'subscribe');
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let eventName = '';
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + this.authToken,
-          'Content-Type': 'application/json',
-          Accept: 'application/x-ndjson',
-          'User-Agent': 'genesisdb-sdk',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!res.ok) {
-        console.error('API Error:', {
-          status: res.status,
-          statusText: res.statusText,
-          headers: Object.fromEntries(res.headers)
-        });
-        throw new Error(`API Error: ${res.status} ${res.statusText}`);
-      }
-
-      if (!res.body) {
-        throw new Error('Response body is null');
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-
-          if (done) {
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-          let newlineIndex;
-
-          while ((newlineIndex = buffer.indexOf('\n')) >= 0) {
-            const line = buffer.slice(0, newlineIndex).trim();
-            buffer = buffer.slice(newlineIndex + 1);
-
-            if (!line) continue;
-
-            try {
-              const jsonStr = line.startsWith('data: ') ? line.slice(6) : line;
-              const json = JSON.parse(jsonStr);
-              if (json.payload === '' && Object.keys(json).length === 1) {
-                continue;
-              }
-              const event = new CloudEvent(json);
-              yield event;
-            } catch (err) {
-              console.error('Error while parsing event:', err);
-              console.error('Problem with JSON:', line);
-            }
-          }
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) {
+          return;
         }
-      } finally {
-        reader.cancel();
+        buffer += decoder.decode(value, { stream: true });
+        let newline: number;
+        while ((newline = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, newline).replace(/\r$/, '');
+          buffer = buffer.slice(newline + 1);
+          if (line.startsWith('event: ')) {
+            eventName = line.slice(7).trim();
+            continue;
+          }
+          if (!line.startsWith('data: ')) {
+            eventName = '';
+            continue;
+          }
+          const payload = line.slice(6);
+          if (eventName === 'error') {
+            let message = payload;
+            try {
+              message = String(JSON.parse(payload).error ?? payload);
+            } catch {
+              // keep the raw payload
+            }
+            throw new GenesisDBError(200, message, 'subscribe ended');
+          }
+          eventName = '';
+          const parsed = JSON.parse(payload);
+          if (parsed && parsed.payload === '' && Object.keys(parsed).length === 1) {
+            continue; // heartbeat
+          }
+          yield parsed as Event<T>;
+        }
       }
-    } catch (error) {
-      console.error('Error while observing events:', error);
-      throw error;
+    } finally {
+      await reader.cancel().catch(() => undefined);
     }
   }
 
+  /** Run a GDBQL query. Resolves to the result rows, or to a single value for a bare aggregate. */
+  async query<R = unknown>(query: string): Promise<R[]> {
+    return this.ndjson<R>('POST', '/api/v1/query', { query }, 'query');
+  }
+
+  /** Distinct top level subjects, sorted. */
+  async subjects(): Promise<string[]> {
+    const rows = await this.ndjson<{ subject: string }>('GET', '/api/v1/subjects', undefined, 'subjects');
+    return rows.map((row) => row.subject);
+  }
+
+  /** Distinct event types, sorted. */
+  async types(): Promise<string[]> {
+    const rows = await this.ndjson<{ type: string }>('GET', '/api/v1/types', undefined, 'types');
+    return rows.map((row) => row.type);
+  }
+
+  // Schemas
+
+  /** Register a schema for an event type. Throws with status 409 when the type already has one. Administrator token. */
+  async registerSchema(type: string, schema: Schema): Promise<void> {
+    await this.json('POST', '/api/v1/schemas', { type, schema }, 'registerSchema');
+  }
+
+  /** Every registered schema. */
+  async schemas(): Promise<RegisteredSchema[]> {
+    return this.ndjson<RegisteredSchema>('GET', '/api/v1/schemas', undefined, 'schemas');
+  }
+
+  // Administration
+
+  /**
+   * Erase every reference payload below a subject. Inline event data is immutable and stays.
+   * Throws with status 404 when the subject has no events, 422 when it has no reference payloads.
+   * Administrator token. Resolves to the server's confirmation text.
+   */
+  async erase(subject: string): Promise<string> {
+    return this.text('POST', '/api/v1/erase', { subject }, 'erase');
+  }
+
+
+  // Transport
+
+  private headers(contentType?: string): Record<string, string> {
+    const headers: Record<string, string> = {
+      Authorization: 'Bearer ' + this.token,
+      'User-Agent': userAgent,
+    };
+    if (contentType) {
+      headers['Content-Type'] = contentType;
+    }
+    return headers;
+  }
+
+  private async request(method: string, path: string, body: unknown, operation: string): Promise<Response> {
+    const controller = this.timeoutMs > 0 ? new AbortController() : undefined;
+    const timer = controller ? setTimeout(() => controller.abort(), this.timeoutMs) : undefined;
+    try {
+      const response = await this.fetchImpl(this.url + path, {
+        method,
+        headers: this.headers(body === undefined ? undefined : 'application/json'),
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: controller?.signal,
+      });
+      if (!response.ok) {
+        throw errorForResponse(response.status, await response.text(), operation);
+      }
+      return response;
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  private async text(method: string, path: string, body: unknown, operation: string): Promise<string> {
+    return (await this.request(method, path, body, operation)).text();
+  }
+
+  private async json<R>(method: string, path: string, body: unknown, operation: string): Promise<R> {
+    return (await this.request(method, path, body, operation)).json() as Promise<R>;
+  }
+
+  private async ndjson<R>(method: string, path: string, body: unknown, operation: string): Promise<R[]> {
+    const text = await this.text(method, path, body, operation);
+    const rows: R[] = [];
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed) {
+        rows.push(JSON.parse(trimmed) as R);
+      }
+    }
+    return rows;
+  }
 }

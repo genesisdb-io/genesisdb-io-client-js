@@ -1,395 +1,178 @@
-# JavaScript/TypeScript SDK
+# GenesisDB client for JavaScript and TypeScript
 
-This is the official JS/TS SDK for GenesisDB, an awesome and production ready event store database system for building event-driven apps.
+The official client for [GenesisDB](https://www.genesisdb.io), the open source event sourcing database. Zero dependencies, works in Node 18+, Deno, Bun and browsers, ships ESM and CommonJS with type definitions.
 
-## GenesisDB Advantages
-
-* Incredibly fast when reading, fast when writing 🚀
-* Easy backup creation and recovery
-* [CloudEvents](https://cloudevents.io/) compatible
-* GDPR-ready
-* Easily accessible via the HTTP interface
-* Auditable. Guarantee database consistency
-* Logging and metrics for Prometheus
-* SQL like query language called GenesisDB Query Language (GDBQL)
-* ...
-
-## Installation
+> **Version 2.0.0 targets GenesisDB 2.0 and is not compatible with GenesisDB 1.x servers or with the 1.x client API.** Routes, configuration, type names and method signatures have changed. Keep a 1.x client for a 1.x server.
+>
+> Existing 1.x clients keep working against a GenesisDB 2.0 server through deprecated route aliases, so the server can be upgraded first and the clients at your own pace. New 2.0 features (stored events returned by commit, upper bounds, schemas, typed errors) need this 2.0.0 client.
 
 ```bash
 npm install genesisdb
 ```
 
-## Configuration
+## Quick start
 
-### Environment Variables
-The following environment variables are required:
-```
-GENESISDB_AUTH_TOKEN=<secret>
-GENESISDB_API_URL=http://localhost:8080
-GENESISDB_API_VERSION=v1
-```
-
-### Basic Setup
-
-```typescript
+```ts
 import { Client } from 'genesisdb';
 
-// Initialize the GenesisDB client
-const client = new Client();
-```
+const db = new Client({ url: 'http://localhost:8080', token: process.env.GENESISDB_AUTH_TOKEN });
 
-## Streaming Events
-
-### Basic Event Streaming
-
-```typescript
-// Stream all events for a subject
-await client.streamEvents('/customer');
-```
-
-### Stream Events from Lower Bound
-
-```typescript
-await client.streamEvents('/', {
-  lowerBound: '2d6d4141-6107-4fb2-905f-445730f4f2a9',
-  includeLowerBoundEvent: true
-});
-```
-
-### Stream Events with Upper Bound
-
-```typescript
-await client.streamEvents('/', {
-  upperBound: '9f3e4141-7208-4fb2-905f-445730f4f3b1',
-  includeUpperBoundEvent: false
-});
-```
-
-### Stream Events with Both Lower and Upper Bounds
-
-```typescript
-await client.streamEvents('/', {
-  lowerBound: '2d6d4141-6107-4fb2-905f-445730f4f2a9',
-  includeLowerBoundEvent: true,
-  upperBound: '9f3e4141-7208-4fb2-905f-445730f4f3b1',
-  includeUpperBoundEvent: false
-});
-```
-
-### Stream Latest Events by Event Type
-
-```typescript
-await client.streamEvents('/', {
-  latestByEventType: 'io.genesisdb.app.customer-updated'
-});
-```
-
-This feature allows you to stream only the latest event of a specific type for each subject. Useful for getting the current state of entities.
-
-## Committing Events
-
-### Basic Event Committing
-
-```typescript
-await client.commitEvents([
-  {
-    source: 'io.genesisdb.app',
-    subject: '/customer',
-    type: 'io.genesisdb.app.customer-added',
-    data: {
-      firstName: 'Bruce',
-      lastName: 'Wayne',
-      emailAddress: 'bruce.wayne@enterprise.wayne'
-    }
-  },
-  {
-    source: 'io.genesisdb.app',
-    subject: '/customer',
-    type: 'io.genesisdb.app.customer-added',
-    data: {
-      firstName: 'Alfred',
-      lastName: 'Pennyworth',
-      emailAddress: 'alfred.pennyworth@enterprise.wayne'
-    }
-  },
-  {
-    source: 'io.genesisdb.store',
-    subject: '/article',
-    type: 'io.genesisdb.store.article-added',
-    data: {
-      name: 'Tumbler',
-      color: 'black',
-      price: 2990000.00
-    }
-  },
-  {
-    source: 'io.genesisdb.app',
-    subject: '/customer/fed2902d-0135-460d-8605-263a06308448',
-    type: 'io.genesisdb.app.customer-personaldata-changed',
-    data: {
-      firstName: 'Angus',
-      lastName: 'MacGyver',
-      emailAddress: 'angus.macgyer@phoenix.foundation'
-    }
-  }
+await db.commit([
+  { source: 'io.example.shop', subject: '/customer/42', type: 'io.example.shop.customer-registered', data: { name: 'Bruce Wayne' } },
 ]);
+
+const events = await db.fetch('/customer/42');
 ```
+
+`url` and `token` fall back to `GENESISDB_URL` and `GENESISDB_AUTH_TOKEN`, so `new Client()` works in an environment that sets both.
+
+## Events
+
+```ts
+// Commit a batch atomically. The server assigns ID, time and hashes and returns the stored events.
+const stored = await db.commit([
+  { source: 'io.example.shop', subject: '/order/1', type: 'io.example.shop.order-placed', data: { total: 99.5 } },
+  { source: 'io.example.shop', subject: '/order/1/item/1', type: 'io.example.shop.item-added', data: { sku: 'A1', qty: 2 } },
+]);
+stored[0].id;   // "3f2c..."
+stored[0].hash; // "a9b1..."
+
+// A subject with one segment gets a generated ID appended.
+await db.commit([{ source: 'io.example.shop', subject: '/customer', type: 'io.example.shop.customer-registered', data: { name: 'Selina' } }]);
+
+// Fetch a subject with all descendants, in commit order.
+const all = await db.fetch('/order/1');
+
+// Resume after a known event, or stop at one.
+const since = await db.fetch('/order', { lowerBound: lastSeenId, includeLowerBoundEvent: false });
+const until = await db.fetch('/order', { upperBound: someId, includeUpperBoundEvent: true });
+
+// Only the newest event of a type below the subject.
+const latest = await db.fetch('/order/1', { latestByEventType: 'io.example.shop.order-placed' });
+```
+
+Event payloads are typed through the generic parameter: `db.fetch<{ total: number }>('/order')` returns `Event<{ total: number }>[]`.
 
 ## Preconditions
 
-Preconditions allow you to enforce certain checks on the server before committing events. GenesisDB supports multiple precondition types:
+Preconditions are checked atomically with the commit. A failed precondition throws `PreconditionFailedError` and writes nothing.
 
-### isSubjectNew
-Ensures that a subject is new (has no existing events):
+```ts
+import { PreconditionFailedError } from 'genesisdb';
 
-```typescript
-await client.commitEvents([
-  {
-    source: 'io.genesisdb.app',
-    subject: '/user/456',
-    type: 'io.genesisdb.app.user-created',
-    data: {
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john.doe@example.com'
-    }
+try {
+  await db.commit(
+    [{ source: 'io.example.shop', subject: '/customer/42', type: 'io.example.shop.customer-registered', data: { email: 'bruce@example.com' } }],
+    [
+      { type: 'isSubjectNew', payload: { subject: '/customer/42' } },
+      { type: 'isQueryResultTrue', payload: { query: "STREAM e FROM events WHERE e.data.email == 'bruce@example.com' MAP COUNT() == 0" } },
+    ],
+  );
+} catch (error) {
+  if (error instanceof PreconditionFailedError) {
+    console.log(error.preconditionType, error.reason); // "isSubjectNew" "subject /customer/42 already has events"
   }
-], [
-  {
-    type: 'isSubjectNew',
-    payload: {
-      subject: '/user/456'
-    }
-  }
-]);
-```
-
-### isSubjectExisting
-Ensures that events exist for the specified subject:
-
-```typescript
-await client.commitEvents([
-  {
-    source: 'io.genesisdb.app',
-    subject: '/user/456',
-    type: 'io.genesisdb.app.user-created',
-    data: {
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john.doe@example.com'
-    }
-  }
-], [
-  {
-    type: 'isSubjectExisting',
-    payload: {
-      subject: '/user/456'
-    }
-  }
-]);
-```
-
-### isQueryResultTrue
-Evaluates a query and ensures the result is truthy. Supports the full GDBQL feature set including complex WHERE clauses, aggregations, and calculated fields.
-
-**Basic uniqueness check:**
-```typescript
-await client.commitEvents([
-  {
-    source: 'io.genesisdb.app',
-    subject: '/user/456',
-    type: 'io.genesisdb.app.user-created',
-    data: {
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john.doe@example.com'
-    }
-  }
-], [
-  {
-    type: 'isQueryResultTrue',
-    payload: {
-      query: "STREAM e FROM events WHERE e.data.email == 'john.doe@example.com' MAP COUNT() == 0"
-    }
-  }
-]);
-```
-
-**Business rule enforcement (transaction limits):**
-```typescript
-await client.commitEvents([
-  {
-    source: 'io.genesisdb.banking',
-    subject: '/user/123/transactions',
-    type: 'io.genesisdb.banking.transaction-processed',
-    data: {
-      amount: 500.00,
-      currency: 'EUR'
-    }
-  }
-], [
-  {
-    type: 'isQueryResultTrue',
-    payload: {
-      query: "STREAM e FROM events WHERE e.subject UNDER '/user/123' AND e.type == 'transaction-processed' AND e.time >= '2024-01-01T00:00:00Z' MAP SUM(e.data.amount) + 500 <= 10000"
-    }
-  }
-]);
-```
-
-**Complex validation with aggregations:**
-```typescript
-await client.commitEvents([
-  {
-    source: 'io.genesisdb.events',
-    subject: '/conference/2024/registrations',
-    type: 'io.genesisdb.events.registration-created',
-    data: {
-      attendeeId: 'att-789',
-      ticketType: 'premium'
-    }
-  }
-], [
-  {
-    type: 'isQueryResultTrue',
-    payload: {
-      query: "STREAM e FROM events WHERE e.subject UNDER '/conference/2024/registrations' AND e.type == 'registration-created' GROUP BY e.data.ticketType HAVING e.data.ticketType == 'premium' MAP COUNT() < 50"
-    }
-  }
-]);
-```
-
-**Supported GDBQL Features in Preconditions:**
-- WHERE conditions with AND/OR/IN/BETWEEN operators
-- Hierarchical subject queries (UNDER, DESCENDANTS)
-- Aggregation functions (COUNT, SUM, AVG, MIN, MAX)
-- GROUP BY with HAVING clauses
-- ORDER BY and LIMIT clauses
-- Calculated fields and expressions
-- Nested field access (e.data.address.city)
-- String concatenation and arithmetic operations
-
-If a precondition fails, the commit returns HTTP 412 (Precondition Failed) with details about which condition failed.
-
-## GDPR Compliance
-
-### Store Data as Reference
-
-```typescript
-await client.commitEvents([
-  {
-    source: 'io.genesisdb.app',
-    subject: '/user/456',
-    type: 'io.genesisdb.app.user-created',
-    data: {
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john.doe@example.com'
-    },
-    options: {
-      storeDataAsReference: true
-    }
-  }
-]);
-```
-
-### Delete Referenced Data
-
-```typescript
-await client.eraseData('/user/456');
-```
-
-## Observing Events
-
-### Basic Event Observation
-
-```typescript
-const encoder = new TextEncoder()
-const stream = new ReadableStream({
-  async start(controller) {
-    try {
-      for await (const event of client.observeEvents('/customer')) {
-        controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'))
-      }
-    } catch (err) {
-      console.error('Error:', err)
-      controller.close()
-    }
-  }
-})
-```
-
-### Observe Events from Lower Bound (Message Queue)
-
-```typescript
-for await (const event of client.observeEvents('/customer', {
-  lowerBound: '2d6d4141-6107-4fb2-905f-445730f4f2a9',
-  includeLowerBoundEvent: true
-})) {
-  console.log('Received event:', event)
 }
 ```
 
-### Observe Events with Upper Bound (Message Queue)
+Types: `isSubjectNew`, `isSubjectExisting`, `isQueryResultTrue`.
 
-```typescript
-for await (const event of client.observeEvents('/customer', {
-  upperBound: '9f3e4141-7208-4fb2-905f-445730f4f3b1',
-  includeUpperBoundEvent: false
-})) {
-  console.log('Received event:', event)
+## Subscriptions
+
+`subscribe` is an async generator over Server-Sent Events. It yields the existing history first, then new events as they are committed, and runs until you abort it.
+
+```ts
+const controller = new AbortController();
+
+for await (const event of db.subscribe('/order', { interval: 0.5, signal: controller.signal })) {
+  console.log(event.type, event.data);
+  if (shouldStop) controller.abort();
 }
 ```
 
-### Observe Events with Both Bounds (Message Queue)
+`interval` is the poll interval in seconds (default 1). The bound options of `fetch` work here as well, so a consumer that persists the last processed event ID resumes with `lowerBound`.
 
-```typescript
-for await (const event of client.observeEvents('/customer', {
-  lowerBound: '2d6d4141-6107-4fb2-905f-445730f4f2a9',
-  includeLowerBoundEvent: true,
-  upperBound: '9f3e4141-7208-4fb2-905f-445730f4f3b1',
-  includeUpperBoundEvent: false
-})) {
-  console.log('Received event:', event)
-}
+## Queries
+
+[GDBQL](https://github.com/genesisdb-io/genesisdb/blob/main/docs/gdbql.md) runs on the server. Results come back as rows, a bare aggregate as a single value.
+
+```ts
+const rows = await db.query<{ name: string; total: number }>(
+  "STREAM e FROM events WHERE e.subject UNDER '/customer' MAP { name: e.data.name, total: e.data.total }",
+);
+
+const [count] = await db.query<number>("STREAM e FROM events WHERE e.type == 'io.example.shop.order-placed' MAP COUNT()");
+
+const byCategory = await db.query(
+  "STREAM e FROM events WHERE e.type == 'io.example.shop.item-added' GROUP BY e.data.category MAP { category: e.data.category, items: COUNT(), revenue: SUM(e.data.total) }",
+);
 ```
 
-### Observe Latest Events by Event Type (Message Queue)
+## GDPR: reference payloads and erasure
 
-```typescript
-for await (const event of client.observeEvents('/customer', {
-  latestByEventType: 'io.genesisdb.app.customer-updated'
-})) {
-  console.log('Received latest event:', event)
-}
+Store a payload as reference data and it can be erased later. The event, its hash and the chain stay intact, the payload becomes `{}`.
+
+```ts
+await db.commit([
+  { source: 'io.example.shop', subject: '/customer/42', type: 'io.example.shop.customer-registered', data: { name: 'Bruce', email: 'bruce@example.com' }, options: { storeDataAsReference: true } },
+]);
+
+await db.erase('/customer/42'); // administrator token
 ```
 
-## Querying Events
+Inline payloads are immutable. `erase` on a subject without reference payloads throws with status 422.
 
-```typescript
-const results = await client.queryEvents('STREAM e FROM events WHERE e.type == "io.genesisdb.app.customer-added" ORDER BY e.time DESC LIMIT 20 MAP { subject: e.subject, firstName: e.data.firstName }');
-console.log('Query results:', results);
+## Schemas
+
+```ts
+await db.registerSchema('io.example.shop.order-placed', {
+  type: 'object',
+  properties: { total: { type: 'number' }, currency: { type: 'string' } },
+  required: ['total'],
+});
+
+const schemas = await db.schemas();
 ```
 
-## Health Checks
+Commits of that type are validated. A violation throws with status 400.
 
-```typescript
-// Check API status
-const pingResponse = await client.ping();
-console.log('Ping response:', pingResponse);
+## Catalog, status, administration
 
-// Run audit to check event consistency
-const auditResponse = await client.audit();
-console.log('Audit response:', auditResponse);
+```ts
+await db.subjects();        // ["/customer", "/order"]
+await db.types();           // ["io.example.shop.customer-registered", ...]
+await db.status();          // engine version, event counts, storage, readiness
+await db.ping();            // "Pong", no token required
+
+await db.audit();           // "Audit passed. All 1234 events integrity checks succeeded."
+```
+
+Audit, erase and schema registration need the administrator token. Everything else works with a reader token (`GENESISDB_READ_TOKEN`), commit additionally with a writer token.
+
+## Errors
+
+Every non-2xx answer throws `GenesisDBError` with `status` and `body`. Subclasses: `PreconditionFailedError` (412, with `preconditionType` and `reason`), `AuthenticationError` (401, 403), `NotReadyError` (503). A subscription that the server ends with an error throws `GenesisDBError` from the generator.
+
+## Configuration
+
+```ts
+new Client({
+  url: 'http://localhost:8080',   // or GENESISDB_URL
+  token: '...',                   // or GENESISDB_AUTH_TOKEN
+  timeoutMs: 30000,               // for non-streaming calls, 0 disables
+  fetch: customFetch,             // optional, defaults to globalThis.fetch
+});
+```
+
+## Development
+
+```bash
+npm install
+npm run build
+npm test                                                           # unit tests with a fake fetch
+GENESISDB_URL=http://localhost:8080 GENESISDB_AUTH_TOKEN=... npm run test:integration   # against a running GenesisDB
 ```
 
 ## License
 
 MIT
-
-## Author
-
-* E-Mail: mail@genesisdb.io
-* URL: https://www.genesisdb.io
-* Docs: https://docs.genesisdb.io

@@ -1,5 +1,17 @@
-export * from './config';
-export * from './events';
-export * from './stream-options';
-export * from './preconditions';
-export * from './client';
+export { Client } from './client.js';
+export { AuthenticationError, GenesisDBError, NotReadyError, PreconditionFailedError } from './errors.js';
+export type {
+  ClientConfig,
+  CommitOptions,
+  Event,
+  FetchOptions,
+  IsQueryResultTrue,
+  IsSubjectExisting,
+  IsSubjectNew,
+  NewEvent,
+  Precondition,
+  RegisteredSchema,
+  Schema,
+  Status,
+  SubscribeOptions,
+} from './types.js';

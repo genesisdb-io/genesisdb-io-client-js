@@ -1,39 +1,49 @@
 {
   "name": "genesisdb",
-  "version": "1.1.5",
-  "description": "GenesisDB SDK",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "version": "2.0.0",
+  "description": "The official JavaScript and TypeScript client for GenesisDB, the open source event sourcing database",
+  "type": "module",
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/cjs/index.cjs"
+    }
+  },
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "build": "tsc",
-    "test": "tsx --test src/client.test.ts",
-    "test:integration": "tsx --test src/client.integration.test.ts",
-    "prepare": "npm run build"
+    "build": "rm -rf dist && tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && for f in dist/cjs/*.js; do mv \"$f\" \"${f%.js}.cjs\"; done && sed -i.bak -E 's/require\\(\"\\.\\/([a-z]+)\\.js\"\\)/require(\".\\/\\1.cjs\")/g' dist/cjs/*.cjs && rm dist/cjs/*.bak",
+    "test": "tsx --test test/client.test.ts",
+    "test:integration": "tsx --test test/integration.test.ts",
+    "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
-    "genesis",
     "genesisdb",
-    "eventstore",
-    "eventsourcing",
+    "event-sourcing",
+    "event-store",
+    "cloudevents",
+    "cqrs",
     "database",
-    "database-sdk",
-    "sdk",
-    "typescript"
+    "client"
   ],
-  "author": "Patric Eckhart",
+  "author": "Patric Eckhart <mail@genesisdb.io>",
   "license": "MIT",
-  "dependencies": {
-    "cloudevents": "^8.0.0"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/genesisdb-io/genesisdb-io-client-js"
   },
+  "homepage": "https://www.genesisdb.io",
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "tsx": "^4.23.12",
-    "typescript": "^5.0.0"
-  },
-  "overrides": {
-    "uuid": "^11.1.1"
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
   }
 }
