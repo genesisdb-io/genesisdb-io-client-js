@@ -88,7 +88,7 @@ export interface RegisteredSchema {
   schema: Schema;
 }
 
-/** The body of GET /api/v1/status. */
+/** The body of GET /api/v2/status. */
 export interface Status {
   engine: { version: string; channel: string };
   system: {

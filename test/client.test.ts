@@ -43,7 +43,7 @@ describe('Client construction', () => {
   it('strips trailing slashes from the URL', async () => {
     const { impl, calls } = fakeFetch([{ body: 'Pong' }]);
     await new Client({ url: 'http://x:8080///', token, fetch: impl }).ping();
-    assert.equal(calls[0]?.url, 'http://x:8080/ping');
+    assert.equal(calls[0]?.url, 'http://x:8080/api/v2/ping');
   });
 });
 
@@ -65,7 +65,7 @@ describe('Requests', () => {
       [{ source: 'app', subject: '/a/1', type: 't', data: { n: 1 } }],
       [{ type: 'isSubjectNew', payload: { subject: '/a/1' } }],
     );
-    assert.equal(calls[0]?.url, 'http://x/api/v1/commit');
+    assert.equal(calls[0]?.url, 'http://x/api/v2/commit');
     const body = JSON.parse(calls[0]?.init.body as string);
     assert.equal(body.events.length, 1);
     assert.equal(body.preconditions[0].type, 'isSubjectNew');

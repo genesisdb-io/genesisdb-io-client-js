@@ -53,17 +53,17 @@ export class Client {
 
   /** Liveness check, no token required by the server. Resolves to "Pong". */
   async ping(): Promise<string> {
-    return this.text('GET', '/ping', undefined, 'ping');
+    return this.text('GET', '/api/v2/ping', undefined, 'ping');
   }
 
   /** Engine version, host, event counts, storage format and readiness. */
   async status(): Promise<Status> {
-    return this.json<Status>('GET', '/api/v1/status', undefined, 'status');
+    return this.json<Status>('GET', '/api/v2/status', undefined, 'status');
   }
 
   /** Verify the hash chain of the whole store. Administrator token. Resolves to the audit text. */
   async audit(): Promise<string> {
-    return this.text('GET', '/api/v1/status/audit', undefined, 'audit');
+    return this.text('GET', '/api/v2/admin/audit', undefined, 'audit');
   }
 
   // Events
@@ -80,7 +80,7 @@ export class Client {
     if (preconditions.length > 0) {
       body.preconditions = preconditions;
     }
-    return this.ndjson<Event<T>>('POST', '/api/v1/commit', body, 'commit');
+    return this.ndjson<Event<T>>('POST', '/api/v2/commit', body, 'commit');
   }
 
   /** Fetch the events of a subject and all of its descendants, in commit order. */
@@ -89,7 +89,7 @@ export class Client {
     if (options && Object.keys(options).length > 0) {
       body.options = options;
     }
-    return this.ndjson<Event<T>>('POST', '/api/v1/fetch', body, 'fetch');
+    return this.ndjson<Event<T>>('POST', '/api/v2/fetch', body, 'fetch');
   }
 
   /**
@@ -113,7 +113,7 @@ export class Client {
     if (Object.keys(fetchOptions).length > 0) {
       body.options = fetchOptions;
     }
-    const response = await this.fetchImpl(this.url + '/api/v1/subscribe', {
+    const response = await this.fetchImpl(this.url + '/api/v2/subscribe', {
       method: 'POST',
       headers: this.headers('application/json'),
       body: JSON.stringify(body),
@@ -173,18 +173,18 @@ export class Client {
 
   /** Run a GDBQL query. Resolves to the result rows, or to a single value for a bare aggregate. */
   async query<R = unknown>(query: string): Promise<R[]> {
-    return this.ndjson<R>('POST', '/api/v1/query', { query }, 'query');
+    return this.ndjson<R>('POST', '/api/v2/query', { query }, 'query');
   }
 
   /** Distinct top level subjects, sorted. */
   async subjects(): Promise<string[]> {
-    const rows = await this.ndjson<{ subject: string }>('GET', '/api/v1/subjects', undefined, 'subjects');
+    const rows = await this.ndjson<{ subject: string }>('GET', '/api/v2/subjects', undefined, 'subjects');
     return rows.map((row) => row.subject);
   }
 
   /** Distinct event types, sorted. */
   async types(): Promise<string[]> {
-    const rows = await this.ndjson<{ type: string }>('GET', '/api/v1/types', undefined, 'types');
+    const rows = await this.ndjson<{ type: string }>('GET', '/api/v2/types', undefined, 'types');
     return rows.map((row) => row.type);
   }
 
@@ -192,12 +192,12 @@ export class Client {
 
   /** Register a schema for an event type. Throws with status 409 when the type already has one. Administrator token. */
   async registerSchema(type: string, schema: Schema): Promise<void> {
-    await this.json('POST', '/api/v1/schemas', { type, schema }, 'registerSchema');
+    await this.json('POST', '/api/v2/schemas', { type, schema }, 'registerSchema');
   }
 
   /** Every registered schema. */
   async schemas(): Promise<RegisteredSchema[]> {
-    return this.ndjson<RegisteredSchema>('GET', '/api/v1/schemas', undefined, 'schemas');
+    return this.ndjson<RegisteredSchema>('GET', '/api/v2/schemas', undefined, 'schemas');
   }
 
   // Administration
@@ -208,7 +208,7 @@ export class Client {
    * Administrator token. Resolves to the server's confirmation text.
    */
   async erase(subject: string): Promise<string> {
-    return this.text('POST', '/api/v1/erase', { subject }, 'erase');
+    return this.text('POST', '/api/v2/admin/erase', { subject }, 'erase');
   }
 
 

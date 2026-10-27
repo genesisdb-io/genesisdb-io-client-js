@@ -4,7 +4,7 @@ The official client for [GenesisDB](https://www.genesisdb.io), the open source e
 
 > **Version 2.0.0 targets GenesisDB 2.0 and is not compatible with GenesisDB 1.x servers or with the 1.x client API.** Routes, configuration, type names and method signatures have changed. Keep a 1.x client for a 1.x server.
 >
-> Existing 1.x clients keep working against a GenesisDB 2.0 server through deprecated route aliases, so the server can be upgraded first and the clients at your own pace. New 2.0 features (stored events returned by commit, upper bounds, schemas, typed errors) need this 2.0.0 client.
+> Existing 1.x clients keep working against a GenesisDB 2.0 server, which still serves the unchanged 1.x API under `/api/v1`, so the server can be upgraded first and the clients at your own pace. New 2.0 features (stored events returned by commit, upper bounds, schemas, typed errors) need this 2.0.0 client.
 
 ```bash
 npm install genesisdb
